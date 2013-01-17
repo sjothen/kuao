@@ -9,18 +9,23 @@ class Symbol:
   STRING = 2
   NUMBER = 3
   SYMBOL = 4
-  WSPACE = 5
   def __init__(self, tag, value=None):
     self.tag = tag
     self.value = value
   def __repr__(self):
-    return '<%d: %s>' % (self.tag, self.value)
+    if self.value:
+      return '%d(%s)' % (self.tag, self.value)
+    else:
+      return '%d' % (self.tag,)
 
 class Reader:
   def __init__(self, strm):
     self.stream = strm
-    self.nxt()
+    self.ch = None
+    #self.nxt()
   def peek(self):
+    if self.ch == None:
+      self.nxt()
     return self.ch
   def nxt(self):
     self.ch = self.stream.read(1)
@@ -91,13 +96,47 @@ class Lexer:
       r.nxt()
     return s
 
+class ParserException(Exception):
+  pass
+
 class Parser:
   def __init__(self, lex):
     self.lexer = lex
+  def read(self):
+    tok = self.lexer.token()
+    if not tok:
+      return None
+    if tok.tag in [Symbol.STRING, Symbol.NUMBER, Symbol.SYMBOL]:
+      return tok
+    if tok.tag == Symbol.LPAREN:
+      return self.readlist()
+    if tok.tag == Symbol.RPAREN:
+      raise ParserException, "Unexpected RPAREN"
+  def readlist(self):
+    l = []
+    while True:
+      tok = self.lexer.token()
+      if not tok:
+        raise ParserException, "Unexpected EOF"
+      if tok.tag == Symbol.RPAREN:
+        return l
+      if tok.tag == Symbol.LPAREN:
+        l.append(self.readlist())
+      else:
+        l.append(tok)
 
-lex = Lexer()
-#toks = list(lex.tokens())
-#print toks
+def main():
+  par = Parser(Lexer())
+  while True:
+    # Can't use print with ,: it forces leading space next print
+    sys.stdout.write('> ')
+    sexp = par.read()
+    if sexp is None:
+      break
+    print sexp
+
+if __name__ == '__main__':
+  main()
 
 class Env:
   def __init__(self, parent=None):
