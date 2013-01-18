@@ -196,12 +196,6 @@ def define(env, exp):
 def mkclosure(env, exp):
   pass
 
-def plus(env, exp):
-  total = 0
-  for e in exp:
-    total = op(total, kuaoeval(env, e))
-  return total
-
 def mkop1(fn):
   def op(env, exp):
     if len(exp) == 0:
