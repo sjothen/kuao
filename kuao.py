@@ -74,7 +74,7 @@ class Lexer:
     s = ''
     while r.peek() != '"':
       if not r.peek():
-        raise LexerException, "Unexpected EOF"
+        raise LexerException, "unexpected EOF"
       s += r.peek()
       r.nxt()
     r.nxt()
@@ -111,13 +111,13 @@ class Parser:
     if tok.tag == Symbol.LPAREN:
       return self.readlist()
     if tok.tag == Symbol.RPAREN:
-      raise ParserException, "Unexpected RPAREN"
+      raise ParserException, "unexpected RPAREN"
   def readlist(self):
     l = []
     while True:
       tok = self.lexer.token()
       if not tok:
-        raise ParserException, "Unexpected EOF"
+        raise ParserException, "unexpected EOF"
       if tok.tag == Symbol.RPAREN:
         return l
       if tok.tag == Symbol.LPAREN:
