@@ -53,7 +53,7 @@ class Lexer:
       return Symbol(Symbol.STRING, self.readstr())
     elif c in string.digits:
       return Symbol(Symbol.NUMBER, self.readnum())
-    elif c in string.ascii_letters or c in '!?%*+-.:<=>^_~':
+    elif c in string.ascii_letters or c in '!?%*+-.:<=>^_~/\\':
       return Symbol(Symbol.SYMBOL, self.readsym())
     elif c in string.whitespace:
       self.skipws()
@@ -85,10 +85,10 @@ class Lexer:
     while r.peek() and r.peek() in string.digits:
       i += r.peek()
       r.nxt()
-    return i
+    return int(i)
   def readsym(self):
     r = self.rdr
-    c = string.ascii_letters + string.digits + '!?%*+-.:<=>^_~'
+    c = string.ascii_letters + string.digits + '!?%*+-.:<=>^_~/\\'
     s = r.peek()
     r.nxt()
     while r.peek() and r.peek() in c:
