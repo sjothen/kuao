@@ -12,6 +12,13 @@ class Symbol:
   def __init__(self, tag, value=None):
     self.tag = tag
     self.value = value
+  def __str__(self):
+    if self.tag == self.STRING:
+      return '"' + self.value + '"'
+    elif self.tag == self.SYMBOL:
+      return self.value
+    elif self.tag == self.NUMBER:
+      return str(self.value)
   def __repr__(self):
     if self.value:
       return '%d(%s)' % (self.tag, self.value)
@@ -134,6 +141,9 @@ class Parser:
       else:
         l.append(tok)
 
+class KuaoException(Exception):
+  pass
+
 class Env:
   def __init__(self, parent=None):
     self.parent = parent
@@ -144,21 +154,20 @@ class Env:
     elif self.parent:
       return self.parent.lookup(key)
     else:
-      raise KeyError, key
+      raise KuaoException, 'undefined variable: %s' % (key,)
   def add(self, key, value):
     self.bindings[key] = value
   def merge(self, d):
     for k in d.keys():
       self.bindings[k] = d[k]
 
-class KuaoException(Exception):
-  pass
-
 class Closure:
   def __init__(self, env, args, body):
     self.env = env
     self.args = args
     self.body = body
+  def __repr__(self):
+    return '#(closure)'
 
 def closurep(exp):
   return isinstance(exp, Closure)
@@ -170,7 +179,9 @@ def kuaoeval(env, exp):
     if len(exp) == 0:
       return exp
     else:
-      car, cdr = kuaoeval(env, exp[0]), exp[1:]
+      car = kuaoeval(env, exp[0])
+      #cdr = map(lambda e: kuaoeval(env, e), exp[1:])
+      cdr = exp[1:]
       if callable(car):
         return car(env, cdr)
       elif closurep(car):
@@ -184,17 +195,37 @@ def kuaoeval(env, exp):
 
 def define(env, exp):
   if len(exp) != 2:
-    raise KuaoException, "define requires 2 arguments"
+    raise KuaoException, "error: define requires 2 arguments"
   bnd = exp[0]
   exp = exp[1]
   if symbolp(bnd):
     e = kuaoeval(env, exp)
     env.add(bnd.value, e)
     return e
-  #return Closure(env, code)
 
 def mkclosure(env, exp):
+  # form: (lambda (arg1 arg2 ...) body)
+  nenv = Env(env)
   pass
+
+def check_list_size(lst, size):
+  if not listp(lst):
+    raise KuaoException, "error: argument not list"
+  if len(lst) < size:
+    raise KuaoException, "error: list size must be at least %d" % (size,)
+
+def car(env, exp):
+  arg = kuaoeval(env, exp[0])
+  check_list_size(arg, 1)
+  return arg[0]
+
+def cdr(env, exp):
+  arg = kuaoeval(env, exp[0])
+  check_list_size(arg, 1)
+  return arg[1:]
+
+def quote(env, exp):
+  return exp[0]
 
 def mkop1(fn):
   def op(env, exp):
@@ -220,8 +251,20 @@ toplevel.merge({
   '+': mkop(0, lambda a, b: a+b),
   '-': mkop1(lambda a, b: a-b),
   '*': mkop(1, lambda a, b: a*b),
-  '/': mkop1(lambda a, b: a/b)
+  '/': mkop1(lambda a, b: a/b),
+  'car': car,
+  'cdr': cdr,
+  'quote': quote
 })
+
+def kuaostr(sxp):
+  if listp(sxp):
+    return "(" + " ".join(map(kuaostr, sxp)) + ")"
+  else:
+    return str(sxp)
+
+def kuaoprint(sxp):
+  print kuaostr(sxp)
 
 def main():
   par = Parser(Lexer())
@@ -233,10 +276,7 @@ def main():
       break
     try:
       ret = kuaoeval(toplevel, sexp)
-      if listp(ret):
-        print ("(" + " ".join(ret) + ")")
-      else:
-        print ret
+      kuaoprint(ret)
     except KuaoException as e:
       print e
 
