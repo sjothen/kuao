@@ -38,7 +38,6 @@ class Reader:
   def __init__(self, strm):
     self.stream = strm
     self.ch = None
-    #self.nxt()
   def peek(self):
     if self.ch == None:
       self.nxt()
@@ -51,7 +50,7 @@ class LexerException(Exception):
   pass
 
 class Lexer:
-  def __init__(self, strm=sys.stdin):
+  def __init__(self, strm):
     self.rdr = Reader(strm)
   def token(self):
     r = self.rdr
@@ -208,7 +207,7 @@ class Closure:
       raise KuaoException, "error: expected %d arguments, got %d" % (len(self.params), len(args))
     for k, v in zip(self.params, map(lambda e: kuaoeval(self.env, e), args)):
       self.env.define(k.value, v)
-    self.env.printe()
+    #self.env.printe()
     ret = None
     for form in self.body:
       ret = kuaoeval(self.env, form)
@@ -341,20 +340,29 @@ def kuaostr(sxp):
 def kuaoprint(sxp):
   print kuaostr(sxp)
 
-def main():
-  par = Parser(Lexer())
+def repl(p, interactive=True):
   while True:
     # Can't use print with ,: it forces leading space next print
-    sys.stdout.write('kuao> ')
-    sexp = par.read()
+    if interactive:
+      sys.stdout.write('kuao> ')
+    sexp = p.read()
     if sexp is None:
       break
     try:
       ret = kuaoeval(toplevel, sexp)
-      if ret is not None:
+      if ret is not None and interactive:
         kuaoprint(ret)
     except KuaoException as e:
-      print e
+      if interactive:
+        print e
+      else:
+        raise e
+
+def main():
+  strm = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin
+  lexer = Lexer(strm)
+  parser = Parser(lexer)
+  repl(parser, strm is sys.stdin)
 
 if __name__ == '__main__':
   main()
