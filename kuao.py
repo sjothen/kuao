@@ -364,8 +364,22 @@ def booleanq(env, exp):
   e = check1eval(env, exp)
   return isinstance(e, bool)
 
+def doif(env, exp):
+  # (if cond texp fexp)
+  if len(exp) not in [2, 3]:
+    raise KuaoException, "error: if requires 2 or 3 args"
+  cond = kuaoeval(env, exp[0])
+  if isinstance(cond, bool) and not cond:
+    if len(exp) == 3:
+      return kuaoeval(env, exp[2])
+    else:
+      return None
+  else:
+    return kuaoeval(env, exp[1])
+
 toplevel.merge({
   'define': define,
+  'if': doif,
   'set!': setf,
   'lambda': mkclosure,
   '+': mkop(0, lambda a, b: a+b),
