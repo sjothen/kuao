@@ -163,24 +163,56 @@ class Env:
   def __init__(self, parent=None):
     self.parent = parent
     self.bindings = {}
-  def lookup(self, key):
+  def find_binding(self, key):
     if self.bindings.has_key(key):
-      return self.bindings[key]
+      return self.bindings
     elif self.parent:
-      return self.parent.lookup(key)
+      return self.parent.find_binding(key)
     else:
-      raise KuaoException, 'undefined variable: %s' % (key,)
-  def add(self, key, value):
+      return None
+  def lookup(self, key):
+    env = self.find_binding(key)
+    if env:
+      return env[key]
+    else:
+      raise KuaoException, 'undefined variable %s' % (key,)
+  def set(self, key, value):
+    """Sets a previously bound variable to a new value."""
+    env = self.find_binding(key)
+    if env:
+      env[key] = value
+    else:
+      self.bindings[key] = value
+  def define(self, key, value):
+    """Adds a new locally bound variable."""
     self.bindings[key] = value
   def merge(self, d):
     for k in d.keys():
       self.bindings[k] = d[k]
+  def printe(self, indent=0):
+    ind = ' ' * indent
+    print "%s{" % (ind,)
+    for k, v in self.bindings.items():
+      print "%s%s=%s" % (ind, str(k), str(v))
+    print "%s{" % (ind,)
+    if self.parent:
+      self.parent.printe(indent+2)
 
 class Closure:
-  def __init__(self, env, args, body):
+  def __init__(self, env, params, body):
     self.env = env
-    self.args = args
+    self.params = params
     self.body = body
+  def call(self, args):
+    if len(args) != len(self.params):
+      raise KuaoException, "error: expected %d arguments, got %d" % (len(self.params), len(args))
+    for k, v in zip(self.params, map(lambda e: kuaoeval(self.env, e), args)):
+      self.env.define(k.value, v)
+    self.env.printe()
+    ret = None
+    for form in self.body:
+      ret = kuaoeval(self.env, form)
+    return ret
   def __repr__(self):
     return '#(closure)'
 
@@ -195,7 +227,6 @@ def kuaoeval(env, exp):
       return exp
     else:
       car = kuaoeval(env, exp[0])
-      #cdr = map(lambda e: kuaoeval(env, e), exp[1:])
       cdr = exp[1:]
       if callable(car):
         return car(env, cdr)
@@ -210,18 +241,28 @@ def kuaoeval(env, exp):
 
 def define(env, exp):
   if len(exp) != 2:
-    raise KuaoException, "error: define requires 2 arguments"
+    raise KuaoException, "error: set! requires 2 arguments"
   bnd = exp[0]
   exp = exp[1]
   if symbolp(bnd):
     e = kuaoeval(env, exp)
-    env.add(bnd.value, e)
+    env.set(bnd.value, e)
     return e
+
+def setf(env, exp):
+  pass
 
 def mkclosure(env, exp):
   # form: (lambda (arg1 arg2 ...) body)
   nenv = Env(env)
-  pass
+  args = exp[0]
+  if not all(map(symbolp, args)):
+    raise KuaoException, "error: non-symbol in arglist"
+  closure = Closure(nenv, args, exp[1:])
+  return closure
+
+def mklist(env, exp):
+  return map(lambda e: kuaoeval(env, e), exp)
 
 def check_list_size(lst, size):
   if not listp(lst):
@@ -256,12 +297,19 @@ def mkop(default, fn):
   def op(env, exp):
     total = default
     for e in exp:
-      total = fn(total, kuaoeval(env, e))
+      ee = kuaoeval(env, e)
+      total = fn(total, ee)
     return total
   return op
 
+def display(env, exp):
+  for e in exp:
+    ee = kuaoeval(env, e)
+    sys.stdout.write(str(ee))
+
 toplevel.merge({
   'define': define,
+  'set!': setf,
   'lambda': mkclosure,
   '+': mkop(0, lambda a, b: a+b),
   '-': mkop1(lambda a, b: a-b),
@@ -269,7 +317,9 @@ toplevel.merge({
   '/': mkop1(lambda a, b: a/b),
   'car': car,
   'cdr': cdr,
-  'quote': quote
+  'quote': quote,
+  'list': mklist,
+  'display': display
 })
 
 def kuaostr(sxp):
@@ -291,7 +341,8 @@ def main():
       break
     try:
       ret = kuaoeval(toplevel, sexp)
-      kuaoprint(ret)
+      if ret is not None:
+        kuaoprint(ret)
     except KuaoException as e:
       print e
 
