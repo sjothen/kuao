@@ -377,11 +377,21 @@ def doif(env, exp):
   else:
     return kuaoeval(env, exp[1])
 
+def numeq(env, exp):
+  if len(exp) < 2:
+    raise KuaoException, "error: requires at least 2 args"
+  ns = map(lambda e: kuaoeval(env, e), exp)
+  if not all(map(lambda n: isinstance(n, int), ns)):
+    raise KuaoException, "error: all args must be numbers"
+  first = ns[0]
+  return all(map(lambda n: n == first, ns))
+
 toplevel.merge({
   'define': define,
   'if': doif,
   'set!': setf,
   'lambda': mkclosure,
+  '=': numeq,
   '+': mkop(0, lambda a, b: a+b),
   '-': mkop1(lambda a, b: a-b),
   '*': mkop(1, lambda a, b: a*b),
