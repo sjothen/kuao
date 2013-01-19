@@ -86,11 +86,26 @@ class Lexer:
     while r.peek() and r.peek() in string.whitespace:
       r.nxt()
   def readstr(self):
+    esc = {
+      '"': '"',
+      'n': '\n',
+      'r': '\r',
+      'f': '\f'
+    }
     r = self.rdr
     s = ''
     while r.peek() != '"':
       if not r.peek():
         raise LexerException, "unexpected EOF"
+      if r.peek() == '\\':
+        # Escape code \n \r \f etc
+        r.nxt()
+        if r.peek() not in esc:
+          raise LexerException, "unknown escape code %s" % (r.peek(),)
+        else:
+          s += esc[r.peek()]
+          r.nxt()
+          continue
       s += r.peek()
       r.nxt()
     r.nxt()
