@@ -176,7 +176,7 @@ class Env:
       return env[key]
     else:
       raise KuaoException, 'undefined variable %s' % (key,)
-  def set(self, key, value):
+  def update(self, key, value):
     """Sets a previously bound variable to a new value."""
     env = self.find_binding(key)
     if env:
@@ -241,16 +241,23 @@ def kuaoeval(env, exp):
 
 def define(env, exp):
   if len(exp) != 2:
+    raise KuaoException, "error: define requires 2 arguments"
+  bnd = exp[0]
+  exp = exp[1]
+  if not symbolp(bnd):
+    raise KuaoException, "error: arg #1 must be symbol"
+  e = kuaoeval(env, exp)
+  env.define(bnd.value, e)
+
+def setf(env, exp):
+  if len(exp) != 2:
     raise KuaoException, "error: set! requires 2 arguments"
   bnd = exp[0]
   exp = exp[1]
-  if symbolp(bnd):
-    e = kuaoeval(env, exp)
-    env.set(bnd.value, e)
-    return e
-
-def setf(env, exp):
-  pass
+  if not symbolp(bnd):
+    raise KuaoException, "error: arg #1 must be symbol"
+  e = kuaoeval(env, exp)
+  env.update(bnd.value, e)
 
 def mkclosure(env, exp):
   # form: (lambda (arg1 arg2 ...) body)
