@@ -9,6 +9,7 @@ class Symbol:
   STRING = 2
   NUMBER = 3
   SYMBOL = 4
+  BOOLEAN = 5
   def __init__(self, tag, value=None):
     self.tag = tag
     self.value = value
@@ -19,6 +20,11 @@ class Symbol:
       return self.value
     elif self.tag == self.NUMBER:
       return str(self.value)
+    elif self.tag == self.BOOLEAN:
+      if self.value:
+        return '#t'
+      else:
+        return '#f'
   def __repr__(self):
     if self.value:
       return '%d(%s)' % (self.tag, self.value)
@@ -33,6 +39,8 @@ def stringp(e):
   return e.tag == Symbol.STRING
 def numberp(e):
   return e.tag == Symbol.NUMBER
+def booleanp(e):
+  return e.tag == Symbol.BOOLEAN
 
 class Reader:
   def __init__(self, strm):
@@ -66,6 +74,9 @@ class Lexer:
     elif c == '"':
       r.nxt()
       return Symbol(Symbol.STRING, self.readstr())
+    elif c == '#':
+      r.nxt()
+      return Symbol(Symbol.BOOLEAN, self.readbool())
     elif c in string.digits:
       return Symbol(Symbol.NUMBER, self.readnum())
     elif c in string.ascii_letters or c in '!?%*+-.:<=>^_~/\\':
@@ -125,6 +136,17 @@ class Lexer:
       s += r.peek()
       r.nxt()
     return s
+  def readbool(self):
+    r = self.rdr
+    c = r.peek()
+    if c == 't':
+      r.nxt()
+      return True
+    elif c == 'f':
+      r.nxt()
+      return False
+    else:
+      raise LexerException, 'boolean must be #t or #f'
 
 class ParserException(Exception):
   pass
@@ -136,7 +158,7 @@ class Parser:
     tok = self.lexer.token()
     if not tok:
       return None
-    if tok.tag in [Symbol.STRING, Symbol.NUMBER, Symbol.SYMBOL]:
+    if tok.tag in [Symbol.STRING, Symbol.NUMBER, Symbol.SYMBOL, Symbol.BOOLEAN]:
       return tok
     if tok.tag == Symbol.LPAREN:
       return self.readlist()
@@ -235,7 +257,7 @@ def kuaoeval(env, exp):
         raise KuaoException, "invalid function application"
   elif symbolp(exp):
     return env.lookup(exp.value)
-  elif stringp(exp) or numberp(exp):
+  elif stringp(exp) or numberp(exp) or booleanp(exp):
     return exp.value
 
 def define(env, exp):
@@ -316,6 +338,21 @@ def display(env, exp):
     else:
       sys.stdout.write(str(ee))
 
+def symbolq(env, exp):
+  if len(exp) != 1:
+    raise KuaoException, "error: requires 1 argument"
+  e = kuaoeval(env, exp[0])
+  pass
+
+def stringq(env, exp):
+  pass
+
+def numberq(env, exp):
+  pass
+
+def listq(env, exp):
+  pass
+
 toplevel.merge({
   'define': define,
   'set!': setf,
@@ -328,12 +365,21 @@ toplevel.merge({
   'cdr': cdr,
   'quote': quote,
   'list': mklist,
-  'display': display
+  'display': display,
+  'symbol?': symbolq,
+  'string?': stringq,
+  'number?': numberq,
+  'list?': listq
 })
 
 def kuaostr(sxp):
   if listp(sxp):
     return "(" + " ".join(map(kuaostr, sxp)) + ")"
+  elif isinstance(sxp, bool):
+    if sxp:
+      return '#t'
+    else:
+      return '#f'
   else:
     return str(sxp)
 
