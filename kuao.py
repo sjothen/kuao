@@ -312,7 +312,10 @@ def mkop(default, fn):
 def display(env, exp):
   for e in exp:
     ee = kuaoeval(env, e)
-    sys.stdout.write(str(ee))
+    if ee is None:
+      sys.stdout.write("#(undef)")
+    else:
+      sys.stdout.write(str(ee))
 
 toplevel.merge({
   'define': define,
