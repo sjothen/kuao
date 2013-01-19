@@ -338,20 +338,31 @@ def display(env, exp):
     else:
       sys.stdout.write(str(ee))
 
-def symbolq(env, exp):
+def check1eval(env, exp):
   if len(exp) != 1:
     raise KuaoException, "error: requires 1 argument"
   e = kuaoeval(env, exp[0])
-  pass
+  return e
+
+def symbolq(env, exp):
+  e = check1eval(env, exp)
+  return isinstance(e, Symbol) and symbolp(e)
 
 def stringq(env, exp):
-  pass
+  e = check1eval(env, exp)
+  return isinstance(e, str)
 
 def numberq(env, exp):
-  pass
+  e = check1eval(env, exp)
+  return isinstance(e, int)
 
 def listq(env, exp):
-  pass
+  e = check1eval(env, exp)
+  return isinstance(e, list)
+
+def booleanq(env, exp):
+  e = check1eval(env, exp)
+  return isinstance(e, bool)
 
 toplevel.merge({
   'define': define,
@@ -369,7 +380,8 @@ toplevel.merge({
   'symbol?': symbolq,
   'string?': stringq,
   'number?': numberq,
-  'list?': listq
+  'list?': listq,
+  'boolean?': booleanq
 })
 
 def kuaostr(sxp):
@@ -380,6 +392,8 @@ def kuaostr(sxp):
       return '#t'
     else:
       return '#f'
+  elif callable(sxp):
+    return '#(closure %s)' % sxp.__name__
   else:
     return str(sxp)
 
