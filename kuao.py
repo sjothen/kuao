@@ -3,7 +3,7 @@
 import sys
 import string
 
-class Symbol:
+class Token:
   LPAREN = 0
   RPAREN = 1
   STRING = 2
@@ -31,16 +31,73 @@ class Symbol:
     else:
       return '%d' % (self.tag,)
 
+class String:
+  def __init__(self, value):
+    self.value = value
+  def __str__(self):
+    return '"' + self.value + '"'
+  def eval(self, env):
+    return self
+
+class Number:
+  def __init__(self, value):
+    self.value = value
+  def __str__(self):
+    return str(self.value)
+  def eval(self, env):
+    return self
+
+class Symbol:
+  def __init__(self, value):
+    self.value = value
+  def __str__(self):
+    return self.value
+  def eval(self, env):
+    return env.lookup(self.value)
+
+class Boolean:
+  def __init__(self, value):
+    self.value = value
+  def __str__(self):
+    if self.value:
+      return '#t'
+    else:
+      return '#f'
+  def eval(self, env):
+    return self
+
+class List:
+  def __init__(self, value):
+    self.value = value
+  def __str__(self):
+    pass
+
+class NullType:
+  def __init__(self):
+    pass
+  def __str__(self):
+    return '()'
+  def eval(self):
+    return self
+
+Null = NullType()
+
+class Pair:
+  def __init__(self, car, cdr):
+    self.car, self.cdr = car, cdr
+  def __str__(self):
+    pass
+
 def listp(e):
   return isinstance(e, list)
 def symbolp(e):
-  return e.tag == Symbol.SYMBOL
+  return e.tag == Token.SYMBOL
 def stringp(e):
-  return e.tag == Symbol.STRING
+  return e.tag == Token.STRING
 def numberp(e):
-  return e.tag == Symbol.NUMBER
+  return e.tag == Token.NUMBER
 def booleanp(e):
-  return e.tag == Symbol.BOOLEAN
+  return e.tag == Token.BOOLEAN
 
 class Reader:
   def __init__(self, strm):
@@ -67,20 +124,20 @@ class Lexer:
       return None
     elif c == '(':
       r.nxt()
-      return Symbol(Symbol.LPAREN)
+      return Token(Token.LPAREN)
     elif c == ')':
       r.nxt()
-      return Symbol(Symbol.RPAREN)
+      return Token(Token.RPAREN)
     elif c == '"':
       r.nxt()
-      return Symbol(Symbol.STRING, self.readstr())
+      return Token(Token.STRING, self.readstr())
     elif c == '#':
       r.nxt()
-      return Symbol(Symbol.BOOLEAN, self.readbool())
+      return Token(Token.BOOLEAN, self.readbool())
     elif c in string.digits:
-      return Symbol(Symbol.NUMBER, self.readnum())
+      return Token(Token.NUMBER, self.readnum())
     elif c in string.ascii_letters or c in '!?%*+-.:<=>^_~/\\':
-      return Symbol(Symbol.SYMBOL, self.readsym())
+      return Token(Token.SYMBOL, self.readsym())
     elif c in string.whitespace:
       self.skipws()
       return self.token()
@@ -158,11 +215,11 @@ class Parser:
     tok = self.lexer.token()
     if not tok:
       return None
-    if tok.tag in [Symbol.STRING, Symbol.NUMBER, Symbol.SYMBOL, Symbol.BOOLEAN]:
+    if tok.tag in [Token.STRING, Token.NUMBER, Token.SYMBOL, Token.BOOLEAN]:
       return tok
-    if tok.tag == Symbol.LPAREN:
+    if tok.tag == Token.LPAREN:
       return self.readlist()
-    if tok.tag == Symbol.RPAREN:
+    if tok.tag == Token.RPAREN:
       raise ParserException, "unexpected RPAREN"
   def readlist(self):
     l = []
@@ -170,9 +227,9 @@ class Parser:
       tok = self.lexer.token()
       if not tok:
         raise ParserException, "unexpected EOF"
-      if tok.tag == Symbol.RPAREN:
+      if tok.tag == Token.RPAREN:
         return l
-      if tok.tag == Symbol.LPAREN:
+      if tok.tag == Token.LPAREN:
         l.append(self.readlist())
       else:
         l.append(tok)
@@ -253,6 +310,7 @@ def kuaoeval(env, exp):
     else:
       car = kuaoeval(env, exp[0])
       cdr = exp[1:]
+      print car, cdr
       if callable(car):
         return car(env, cdr)
       elif closurep(car):
@@ -328,6 +386,9 @@ def mkop1(fn):
 def mkop(default, fn):
   def op(env, exp):
     total = default
+    print exp
+    es = map(lambda e: kuaoeval(env, e), exp)
+    print es
     for e in exp:
       ee = kuaoeval(env, e)
       total = fn(total, ee)
