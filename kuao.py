@@ -224,15 +224,16 @@ class Closure:
     self.env = env
     self.params = params
     self.body = body
-  def call(self, args):
+  def call(self, env, args):
     if len(args) != len(self.params):
       raise KuaoException, "error: expected %d arguments, got %d" % (len(self.params), len(args))
-    for k, v in zip(self.params, map(lambda e: kuaoeval(self.env, e), args)):
-      self.env.define(k.value, v)
-    #self.env.printe()
+    eargs = map(lambda e: kuaoeval(env, e), args)
+    nenv = Env(self.env)
+    for k, v in zip(self.params, eargs):
+      nenv.define(k.value, v)
     ret = None
     for form in self.body:
-      ret = kuaoeval(self.env, form)
+      ret = kuaoeval(nenv, form)
     return ret
   def __repr__(self):
     return '#(closure)'
@@ -252,7 +253,7 @@ def kuaoeval(env, exp):
       if callable(car):
         return car(env, cdr)
       elif closurep(car):
-        return car.call(cdr)
+        return car.call(env, cdr)
       else:
         raise KuaoException, "invalid function application"
   elif symbolp(exp):
