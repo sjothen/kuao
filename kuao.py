@@ -215,7 +215,7 @@ class Env:
     print "%s{" % (ind,)
     for k, v in self.bindings.items():
       print "%s%s=%s" % (ind, str(k), str(v))
-    print "%s{" % (ind,)
+    print "%s}" % (ind,)
     if self.parent:
       self.parent.printe(indent+2)
 
