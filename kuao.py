@@ -227,9 +227,12 @@ class Closure:
   def call(self, env, args):
     if len(args) != len(self.params):
       raise KuaoException, "error: expected %d arguments, got %d" % (len(self.params), len(args))
+    # evaluate arguments in callers env!
     eargs = map(lambda e: kuaoeval(env, e), args)
+    # new env has closed env as parent
     nenv = Env(self.env)
     for k, v in zip(self.params, eargs):
+      # add args to new env
       nenv.define(k.value, v)
     ret = None
     for form in self.body:
@@ -396,19 +399,27 @@ def nullp(env, exp):
   else:
     return False
 
-def lte(env, exp):
-  if len(exp) != 2:
-    raise KuaoException, "error: requires 2 args"
-  args = map(lambda e: kuaoeval(env, e), exp)
-  return args[0] <= args[1]
+def compare(fn):
+  def wrapped(env, exp):
+    if len(exp) < 2:
+      raise KuaoException, "error: requires at least 2 args"
+    args = map(lambda e: kuaoeval(env, e), exp)
+    for i in range(0,len(args)-1):
+      if not fn(args[i], args[i+1]):
+        return False
+    return True
+  return wrapped
 
 toplevel.merge({
   'define': define,
   'if': doif,
   'set!': setf,
   'lambda': mkclosure,
-  '=': numeq,
-  '<=': lte,
+  '=': compare(lambda a, b: a == b),
+  '<=': compare(lambda a, b: a <= b),
+  '<': compare(lambda a, b: a < b),
+  '>=': compare(lambda a, b: a >= b),
+  '>': compare(lambda a, b: a > b),
   '+': mkop(0, lambda a, b: a+b),
   '-': mkop1(lambda a, b: a-b),
   '*': mkop(1, lambda a, b: a*b),
