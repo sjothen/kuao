@@ -387,12 +387,28 @@ def numeq(env, exp):
   first = ns[0]
   return all(map(lambda n: n == first, ns))
 
+def nullp(env, exp):
+  if len(exp) != 1:
+    raise KuaoException, "error: requires 1 arg"
+  arg = kuaoeval(env, exp[0])
+  if isinstance(arg, list):
+    return len(arg) == 0
+  else:
+    return False
+
+def lte(env, exp):
+  if len(exp) != 2:
+    raise KuaoException, "error: requires 2 args"
+  args = map(lambda e: kuaoeval(env, e), exp)
+  return args[0] <= args[1]
+
 toplevel.merge({
   'define': define,
   'if': doif,
   'set!': setf,
   'lambda': mkclosure,
   '=': numeq,
+  '<=': lte,
   '+': mkop(0, lambda a, b: a+b),
   '-': mkop1(lambda a, b: a-b),
   '*': mkop(1, lambda a, b: a*b),
@@ -406,7 +422,8 @@ toplevel.merge({
   'string?': stringq,
   'number?': numberq,
   'list?': listq,
-  'boolean?': booleanq
+  'boolean?': booleanq,
+  'null?': nullp
 })
 
 def kuaostr(sxp):
