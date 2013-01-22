@@ -159,13 +159,13 @@ class Closure:
         defineinto(p.cdr, a.cdr, env)
     checkproper(args)
     nenv = Env(self.env)
-    pl = self.params.length()
-    al = args.length()
-    # variable arg lambda
+   # variable arg lambda
     if isinstance(self.params, Symbol):
       nenv.define(self.params, args)
     # list of params
     elif isinstance(self.params, Pair):
+      pl = self.params.length()
+      al = args.length()
       # no rest argument
       if self.params.proper:
         if pl != al:
@@ -179,6 +179,7 @@ class Closure:
         else:
           defineinto(self.params, args, nenv)
     else:
+      al = args.length()
       if al != 0:
         error("function takes no arguments, given %d" % al)
     ret = Undef
