@@ -578,6 +578,14 @@ def gte(env, exp):
 def numeq(env, exp):
   return comp('=', env, exp, lambda a, b: a == b)
 
+def kapply(env, exp):
+  length = exp.length()
+  if length != 2:
+    error("'apply' requires 2 arguments, given %d" % length)
+  fn = exp.car
+  lst = exp.cdr.car
+  return fn(env, lst)
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
@@ -598,7 +606,8 @@ toplevel = Env().merge({
   Symbol('cdr')    : Primitive(cdr),
   Symbol('cons')   : Primitive(cons),
   Symbol('null?')  : Primitive(nullp),
-  Symbol('not')    : Primitive(knot)
+  Symbol('not')    : Primitive(knot),
+  Symbol('apply')  : Primitive(kapply)
 })
 
 def repl(p, interactive=True):
