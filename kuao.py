@@ -404,7 +404,7 @@ class Env:
       self.parent.printe(indent+2)
 
 def error(s):
-  raise KuaoException, s
+  raise KuaoException, 'error: %s' % s
 
 def define(env, exp):
   sym = exp.car
@@ -500,6 +500,28 @@ def mklambda(env, exp):
   body = exp.cdr
   return Closure(env, args, body)
 
+def car(env, exp):
+  if exp is Null:
+    error('car requires 1 argument')
+  if not isinstance(exp.car, Pair):
+    error('cannot take car of non-pair')
+  return exp.car.car
+
+def cdr(env, exp):
+  if exp is Null:
+    error('cdr requires 1 argument')
+  if exp.car is Null or not isinstance(exp.car, Pair):
+    error('cannot take cdr of non-pair')
+  return exp.car.cdr
+
+def cons(env, exp):
+  arglen = exp.length()
+  if arglen != 2:
+    error("'cons' requires 2 arguments, given %d" % arglen)
+  a = exp.car
+  b = exp.cdr.car
+  return Pair(a, b)
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
@@ -510,7 +532,10 @@ toplevel = Env().merge({
   Symbol('*')      : Primitive(multiply),
   Symbol('-')      : Primitive(subtract),
   Symbol('lambda') : Special(mklambda),
-  Symbol('quote')  : Special(quote)
+  Symbol('quote')  : Special(quote),
+  Symbol('car')    : Primitive(car),
+  Symbol('cdr')    : Primitive(cdr),
+  Symbol('cons')   : Primitive(cons)
 })
 
 def repl(p, interactive=True):
@@ -518,10 +543,10 @@ def repl(p, interactive=True):
     # Can't use print with ,: it forces leading space next print
     if interactive:
       sys.stdout.write('kuao> ')
-    sexp = p.sexp()
-    if sexp is None:
-      break
     try:
+      sexp = p.sexp()
+      if sexp is None:
+        break
       ret = sexp.eval(toplevel)
       if ret is not Undef and interactive:
         print ret
@@ -530,6 +555,8 @@ def repl(p, interactive=True):
         print e
       else:
         raise e
+    except Exception as e:
+      print 'error: %s' % e
 
 def main():
   strm = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin
