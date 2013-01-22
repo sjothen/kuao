@@ -14,6 +14,10 @@ class String:
 class Number:
   def __init__(self, value):
     self.value = value
+  def __eq__(self, other):
+   return isinstance(other, self.__class__) and self.value == other.value
+  def __ne__(self, other):
+    return not self.__eq__(other)
   def __str__(self):
     return str(self.value)
   def eval(self, env):
@@ -22,10 +26,16 @@ class Number:
 class Symbol:
   def __init__(self, value):
     self.value = value
+  def __hash__(self):
+    return hash(self.value)
+  def __eq__(self, other):
+   return isinstance(other, self.__class__) and self.value == other.value
+  def __ne__(self, other):
+    return not self.__eq__(other)
   def __str__(self):
     return self.value
   def eval(self, env):
-    return env.lookup(self.value)
+    return env.lookup(self)
 
 class Boolean:
   def __init__(self, value):
@@ -38,29 +48,66 @@ class Boolean:
   def eval(self, env):
     return self
 
-class List:
-  def __init__(self, value):
-    self.value = value
-  def car(self):
-    return self.value[0]
-  def cdr(self):
-    return self.value[1:]
-  def __str__(self):
-    return "(" + " ".join(map(str, self.value)) + ")"
+T = Boolean(True)
+F = Boolean(False)
 
 class NullType:
   def __init__(self):
     pass
   def __str__(self):
     return '()'
-  def eval(self):
+  def each(self):
+    return []
+  def length(self):
+    return 0
+  def evlist(self, env):
+    return self
+  def eval(self, env):
     return self
 
 Null = NullType()
 
+class UndefinedType:
+  def __init__(self):
+    pass
+  def __str__(self):
+    return '#(undef)'
+
+Undef = UndefinedType()
+
 class Pair:
   def __init__(self, car, cdr):
     self.car, self.cdr = car, cdr
+  def evlist(self, env):
+    ecar = self.car.eval(env)
+    if isinstance(self.cdr, Pair):
+      return Pair(ecar, self.cdr.evlist(env))
+    else:
+      return Pair(ecar, self.cdr.eval(env))
+  def eval(self, env):
+    car = self.car.eval(env)
+    if isinstance(car, Special):
+      # Don't eval args for special forms
+      cdr = self.cdr
+      return car(env, cdr)
+    elif callable(car):
+      cdr = self.cdr.evlist(env)
+      return car(env, cdr)
+    else:
+      raise KuaoException, 'illegal function invocation'
+  def length(self):
+    length = 0
+    for x in self.each():
+      length += 1
+    return length
+  def each(self):
+    car = self.car
+    cdr = self.cdr
+    yield car
+    while cdr is not Null:
+      car = cdr.car
+      cdr = cdr.cdr
+      yield car
   def __str__(self):
     def insides(car, cdr):
       if isinstance(cdr, Pair):
@@ -71,10 +118,31 @@ class Pair:
         return str(car) + ' . ' + str(cdr)
     return '(' + insides(self.car, self.cdr) + ')'
 
-#print Pair(Number(1), Pair(Pair(Number(1), Null), Pair(Number(2), Number(3))))
-#print Pair(Number(1), Number(2))
+class Special:
+  def __init__(self, fn):
+    self.fn = fn
+  def __str__(self):
+    return '#(special)'
+  def __call__(self, env, args):
+    return self.fn(env, args)
 
-def listp(e):
+class Primitive:
+  def __init__(self, fn):
+    self.fn = fn
+  def __str__(self):
+    return '#(primitive)'
+  def __call__(self, env, args):
+    return self.fn(env, args)
+
+class Closure:
+  def __init__(self, fn):
+    self.fn = fn
+  def __str__(self):
+    return '#(closure)'
+  def __call__(self, env, args):
+    pass
+
+def pairp(e):
   return isinstance(e, List)
 
 def symbolp(e):
@@ -295,6 +363,7 @@ class Env:
   def merge(self, d):
     for k in d.keys():
       self.bindings[k] = d[k]
+    return self
   def printe(self, indent=0):
     ind = ' ' * indent
     print "%s{" % (ind,)
@@ -304,249 +373,104 @@ class Env:
     if self.parent:
       self.parent.printe(indent+2)
 
-class Builtin:
-  def __init__(self, fn):
-    self.function = fn
-  def eval(self, args):
-    pass
-
-class Closure:
-  def __init__(self, env, params, body):
-    self.env = env
-    self.params = params
-    self.body = body
-  def call(self, env, args):
-    if len(args) != len(self.params):
-      raise KuaoException, "error: expected %d arguments, got %d" % (len(self.params), len(args))
-    # evaluate arguments in callers env!
-    eargs = map(lambda e: kuaoeval(env, e), args)
-    # new env has closed env as parent
-    nenv = Env(self.env)
-    for k, v in zip(self.params, eargs):
-      # add args to new env
-      nenv.define(k.value, v)
-    ret = None
-    for form in self.body:
-      ret = kuaoeval(nenv, form)
-    return ret
-  def __repr__(self):
-    return '#(closure)'
-
 def closurep(exp):
   return isinstance(exp, Closure)
 
-toplevel = Env()
-
-def kuaoeval(env, exp):
-  if listp(exp):
-    if len(exp.value) == 0:
-      return exp
-    else:
-      car = kuaoeval(env, exp.value[0])
-      cdr = exp.value[1:]
-      print car, cdr
-      if callable(car):
-        return car(env, cdr)
-      elif closurep(car):
-        return car.call(env, cdr)
-      else:
-        raise KuaoException, "invalid function application"
-  elif symbolp(exp):
-    return env.lookup(exp.value)
-  elif stringp(exp) or numberp(exp) or booleanp(exp):
-    return exp.value
+def error(s):
+  raise KuaoException, s
 
 def define(env, exp):
-  if len(exp) != 2:
-    raise KuaoException, "error: define requires 2 arguments"
-  bnd = exp[0]
-  exp = exp[1]
-  if not symbolp(bnd):
+  sym = exp.car
+  val = exp.cdr.car
+  if not symbolp(sym):
     raise KuaoException, "error: arg #1 must be symbol"
-  e = kuaoeval(env, exp)
-  env.define(bnd.value, e)
+  e = val.eval(env)
+  env.define(sym, e)
+  return Undef
 
 def setf(env, exp):
-  if len(exp) != 2:
-    raise KuaoException, "error: set! requires 2 arguments"
-  bnd = exp[0]
-  exp = exp[1]
-  if not symbolp(bnd):
+  sym = exp.car
+  val = exp.cdr.car
+  if not symbolp(sym):
     raise KuaoException, "error: arg #1 must be symbol"
-  e = kuaoeval(env, exp)
-  env.update(bnd.value, e)
-
-def mkclosure(env, exp):
-  # form: (lambda (arg1 arg2 ...) body)
-  nenv = Env(env)
-  args = exp[0]
-  if not all(map(symbolp, args)):
-    raise KuaoException, "error: non-symbol in arglist"
-  closure = Closure(nenv, args, exp[1:])
-  return closure
-
-def mklist(env, exp):
-  return map(lambda e: kuaoeval(env, e), exp)
-
-def check_list_size(lst, size):
-  if not listp(lst):
-    raise KuaoException, "error: argument not list"
-  if len(lst) < size:
-    raise KuaoException, "error: list size must be at least %d" % (size,)
-
-def car(env, exp):
-  arg = kuaoeval(env, exp[0])
-  check_list_size(arg, 1)
-  return arg[0]
-
-def cdr(env, exp):
-  arg = kuaoeval(env, exp[0])
-  check_list_size(arg, 1)
-  return arg[1:]
-
-def quote(env, exp):
-  return exp[0]
-
-def mkop1(fn):
-  def op(env, exp):
-    if len(exp) == 0:
-      raise KuaoException, "needs at least 1 arg"
-    total = kuaoeval(env, exp[0])
-    for e in exp[1:]:
-      total = fn(total, kuaoeval(env, e))
-    return total
-  return op
-
-def mkop(default, fn):
-  def op(env, exp):
-    total = default
-    print exp
-    es = map(lambda e: kuaoeval(env, e), exp)
-    print es
-    for e in exp:
-      ee = kuaoeval(env, e)
-      total = fn(total, ee)
-    return total
-  return op
+  e = val.eval(env)
+  env.update(sym, e)
+  return Undef
 
 def display(env, exp):
-  for e in exp:
-    ee = kuaoeval(env, e)
-    if ee is None:
-      sys.stdout.write("#(undef)")
+  val = exp.car.eval(env)
+  sys.stdout.write(val.value if isinstance(val, String) else str(val))
+  return Undef
+
+def runif(env, exp):
+  if exp.length() < 2:
+    error("'if' requires 2 or 3 arguments")
+  cond = exp.car
+  true = exp.cdr.car
+  false = exp.cdr.cdr
+  e = cond.eval(env)
+  if isinstance(e, Boolean) and e.value:
+    return true.eval(env)
+  elif isinstance(e, Boolean) and not e.value:
+    if false is Null:
+      return Undef
     else:
-      sys.stdout.write(str(ee))
-
-def check1eval(env, exp):
-  if len(exp) != 1:
-    raise KuaoException, "error: requires 1 argument"
-  e = kuaoeval(env, exp[0])
-  return e
-
-def symbolq(env, exp):
-  e = check1eval(env, exp)
-  return isinstance(e, Symbol) and symbolp(e)
-
-def stringq(env, exp):
-  e = check1eval(env, exp)
-  return isinstance(e, str)
-
-def numberq(env, exp):
-  e = check1eval(env, exp)
-  return isinstance(e, int)
-
-def listq(env, exp):
-  e = check1eval(env, exp)
-  return isinstance(e, list)
-
-def booleanq(env, exp):
-  e = check1eval(env, exp)
-  return isinstance(e, bool)
-
-def doif(env, exp):
-  # (if cond texp fexp)
-  if len(exp) not in [2, 3]:
-    raise KuaoException, "error: if requires 2 or 3 args"
-  cond = kuaoeval(env, exp[0])
-  if isinstance(cond, bool) and not cond:
-    if len(exp) == 3:
-      return kuaoeval(env, exp[2])
-    else:
-      return None
+      return false.car.eval(env)
   else:
-    return kuaoeval(env, exp[1])
+    return true.eval(env)
+
+def checktype(scope, exp, typ):
+  if not isinstance(exp, typ):
+    error("argument to '%s' must be of type '%s'" % (scope, typ))
 
 def numeq(env, exp):
-  if len(exp) < 2:
-    raise KuaoException, "error: requires at least 2 args"
-  ns = map(lambda e: kuaoeval(env, e), exp)
-  if not all(map(lambda n: isinstance(n, int), ns)):
-    raise KuaoException, "error: all args must be numbers"
-  first = ns[0]
-  return all(map(lambda n: n == first, ns))
-
-def nullp(env, exp):
-  if len(exp) != 1:
-    raise KuaoException, "error: requires 1 arg"
-  arg = kuaoeval(env, exp[0])
-  if isinstance(arg, list):
-    return len(arg) == 0
+  if exp.length() < 2:
+    error("'=' requires at least 2 arguments")
+  fst = exp.car
+  checktype('=', fst, Number)
+  snd = exp.cdr.car
+  checktype('=', snd, Number)
+  if fst != snd:
+    return F
   else:
-    return False
+    es = exp.cdr.cdr
+    for num in es.each():
+      if num != fst:
+        return F
+    return T
 
-def compare(fn):
-  def wrapped(env, exp):
-    if len(exp) < 2:
-      raise KuaoException, "error: requires at least 2 args"
-    args = map(lambda e: kuaoeval(env, e), exp)
-    for i in range(0,len(args)-1):
-      if not fn(args[i], args[i+1]):
-        return False
-    return True
-  return wrapped
+def plus(env, exp):
+  n = Number(0)
+  for m in exp.each():
+    n = Number(n.value + m.value)
+  return n
 
-toplevel.merge({
-  'define': define,
-  'if': doif,
-  'set!': setf,
-  'lambda': mkclosure,
-  '=': compare(lambda a, b: a == b),
-  '<=': compare(lambda a, b: a <= b),
-  '<': compare(lambda a, b: a < b),
-  '>=': compare(lambda a, b: a >= b),
-  '>': compare(lambda a, b: a > b),
-  '+': mkop(0, lambda a, b: a+b),
-  '-': mkop1(lambda a, b: a-b),
-  '*': mkop(1, lambda a, b: a*b),
-  '/': mkop1(lambda a, b: a/b),
-  'car': car,
-  'cdr': cdr,
-  'quote': quote,
-  'list': mklist,
-  'display': display,
-  'symbol?': symbolq,
-  'string?': stringq,
-  'number?': numberq,
-  'list?': listq,
-  'boolean?': booleanq,
-  'null?': nullp
+def multiply(env, exp):
+  n = Number(1)
+  for m in exp.each():
+    n = Number(n.value * m.value)
+  return n
+
+def subtract(env, exp):
+  if exp is Null:
+    error("'-' requires at least 1 argument")
+  n = exp.car
+  if exp.cdr is Null:
+    return Number(n.value * -1)
+  for m in exp.cdr.each():
+    n = Number(n.value - m.value)
+  return n
+
+toplevel = Env().merge({
+  Symbol('define') : Special(define),
+  Symbol('set!')   : Special(setf),
+  Symbol('if')     : Special(runif),
+  Symbol('display'): Primitive(display),
+  Symbol('=')      : Primitive(numeq),
+  Symbol('+')      : Primitive(plus),
+  Symbol('*')      : Primitive(multiply),
+  Symbol('-')      : Primitive(subtract)
 })
-
-def kuaostr(sxp):
-  if listp(sxp):
-    return "(" + " ".join(map(kuaostr, sxp)) + ")"
-  elif isinstance(sxp, bool):
-    if sxp:
-      return '#t'
-    else:
-      return '#f'
-  elif callable(sxp):
-    return '#(closure %s)' % sxp.__name__
-  else:
-    return str(sxp)
-
-def kuaoprint(sxp):
-  print kuaostr(sxp)
 
 def repl(p, interactive=True):
   while True:
@@ -556,16 +480,15 @@ def repl(p, interactive=True):
     sexp = p.sexp()
     if sexp is None:
       break
-    print sexp
-    #try:
-      #ret = kuaoeval(toplevel, sexp)
-      #if ret is not None and interactive:
-      #  kuaoprint(ret)
-    #except KuaoException as e:
-    #  if interactive:
-    #    print e
-    #  else:
-    #    raise e
+    try:
+      ret = sexp.eval(toplevel)
+      if ret not in [None, Undef] and interactive:
+        print ret
+    except KuaoException as e:
+      if interactive:
+        print e
+      else:
+        raise e
 
 def main():
   strm = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin
