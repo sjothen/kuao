@@ -586,6 +586,24 @@ def kapply(env, exp):
   lst = exp.cdr.car
   return fn(env, lst)
 
+def kand(env, exp):
+  ret = T
+  for e in exp.each():
+    ev = e.eval(env)
+    if ev is F:
+      return F
+    ret = ev
+  return ret
+
+def kor(env, exp):
+  ret = F
+  for e in exp.each():
+    ev = e.eval(env)
+    if ev is not F:
+      return ev
+    ret = ev
+  return ret
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
@@ -607,7 +625,9 @@ toplevel = Env().merge({
   Symbol('cons')   : Primitive(cons),
   Symbol('null?')  : Primitive(nullp),
   Symbol('not')    : Primitive(knot),
-  Symbol('apply')  : Primitive(kapply)
+  Symbol('apply')  : Primitive(kapply),
+  Symbol('and')    : Special(kand),
+  Symbol('or')     : Special(kor)
 })
 
 def repl(p, interactive=True):
