@@ -135,12 +135,21 @@ class Primitive:
     return self.fn(env, args)
 
 class Closure:
-  def __init__(self, fn):
-    self.fn = fn
+  def __init__(self, env, params, body):
+    self.env = env
+    self.params = params
+    self.body = body
   def __str__(self):
     return '#(closure)'
   def __call__(self, env, args):
-    pass
+    nenv = Env(self.env)
+    # variable arg lambda
+    if isinstance(self.params, Symbol):
+      nenv.define(self.params, args)
+    ret = Undef
+    for form in self.body.each():
+      ret = form.eval(nenv)
+    return ret
 
 def pairp(e):
   return isinstance(e, List)
