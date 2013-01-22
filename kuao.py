@@ -255,7 +255,7 @@ class Lexer:
       return self.readbool()
     elif c in string.digits:
       return Number(self.readnum())
-    elif c in string.ascii_letters or c in '!?%*+-.:<=>^_~/\\':
+    elif c in string.ascii_letters or c in '+-*/<=>!?:$%_&~^':
       return Symbol(self.readsym())
     elif c in string.whitespace:
       self.skipws()
@@ -310,7 +310,7 @@ class Lexer:
     return int(i)
   def readsym(self):
     r = self.rdr
-    c = string.ascii_letters + string.digits + '!?%*+-.:<=>^_~/\\'
+    c = string.ascii_letters + string.digits + '+-*/<=>!?:$%_&~^'
     s = r.peek()
     r.nxt()
     while r.peek() and r.peek() in c:
