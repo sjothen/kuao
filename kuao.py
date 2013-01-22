@@ -78,6 +78,7 @@ Undef = UndefinedType()
 class Pair:
   def __init__(self, car, cdr):
     self.car, self.cdr = car, cdr
+    self.proper = isinstance(cdr, Pair) or cdr is Null
   def evlist(self, env):
     ecar = self.car.eval(env)
     if isinstance(self.cdr, Pair):
@@ -146,6 +147,18 @@ class Closure:
     # variable arg lambda
     if isinstance(self.params, Symbol):
       nenv.define(self.params, args)
+    # list of params
+    elif isinstance(self.params, Pair): 
+      p, a = self.params, args
+      pcar, pcdr = p.car, p.cdr
+      acar, acdr = a.car, a.cdr
+      nenv.define(pcar, acar)
+      if not isinstance(pcdr, Pair) and pcdr is not Null:
+        nenv.define(pcdr, acdr)
+      while pcdr is not Null:
+        pcar, pcdr = pcdr.car, pcdr.cdr
+        acar, acdr = acdr.car, acdr.cdr
+        nenv.define(pcar, acar)
     ret = Undef
     for form in self.body.each():
       ret = form.eval(nenv)
@@ -205,6 +218,9 @@ class Lexer:
     elif c == '\'':
       r.nxt()
       return c
+    elif c == ';':
+      self.skipcomment()
+      return self.token()
     elif c == '.':
       r.nxt()
       return c
@@ -228,6 +244,11 @@ class Lexer:
         break
       else:
         yield tok
+  def skipcomment(self):
+    r = self.rdr
+    while r.peek() and r.peek() != '\n':
+      r.nxt()
+    r.nxt()
   def skipws(self):
     r = self.rdr
     while r.peek() and r.peek() in string.whitespace:
