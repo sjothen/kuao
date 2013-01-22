@@ -12,7 +12,8 @@
 
 (define println
   (lambda (x)
-    (display x "\n")))
+    (display x)
+    (display "\n")))
 
 (println (remainder 11 10))
 (println (gcd 27 9))

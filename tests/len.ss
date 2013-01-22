@@ -9,7 +9,12 @@
 (define c (quote (1 2)))
 (define d (quote (1 2 3)))
 
-(display (length a) "\n")
-(display (length b) "\n")
-(display (length c) "\n")
-(display (length d) "\n")
+(begin
+  (display (length a))
+  (display "\n")
+  (display (length b))
+  (display "\n")
+  (display (length c))
+  (display "\n")
+  (display (length d))
+  (display "\n"))

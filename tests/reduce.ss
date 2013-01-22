@@ -7,4 +7,5 @@
 (define sum (lambda (xs) (reduce (lambda (x y) (+ x y)) 0 xs)))
 
 (define xs (quote (1 2 3)))
-(display (sum xs) "\n")
+(display (sum xs))
+(display "\n")
