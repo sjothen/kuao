@@ -2,6 +2,7 @@
 
 import sys
 import string
+import itertools as it
 
 class String:
   def __init__(self, value):
@@ -78,7 +79,7 @@ Undef = UndefinedType()
 class Pair:
   def __init__(self, car, cdr):
     self.car, self.cdr = car, cdr
-    self.proper = isinstance(cdr, Pair) or cdr is Null
+    self.proper = cdr is Null or (isinstance(cdr, Pair) and cdr.proper)
   def evlist(self, env):
     ecar = self.car.eval(env)
     if isinstance(self.cdr, Pair):
@@ -105,7 +106,7 @@ class Pair:
     car = self.car
     cdr = self.cdr
     yield car
-    while cdr is not Null:
+    while cdr is not Null and isinstance(cdr, Pair):
       car = cdr.car
       cdr = cdr.cdr
       yield car
@@ -119,12 +120,17 @@ class Pair:
         return str(car) + ' . ' + str(cdr)
     return '(' + insides(self.car, self.cdr) + ')'
 
+def checkproper(xs):
+  if xs is not Null and not xs.proper:
+    error("application with improper list not allowed")
+
 class Special:
   def __init__(self, fn):
     self.fn = fn
   def __str__(self):
     return '#(special)'
   def __call__(self, env, args):
+    checkproper(args)
     return self.fn(env, args)
 
 class Primitive:
@@ -133,6 +139,7 @@ class Primitive:
   def __str__(self):
     return '#(primitive)'
   def __call__(self, env, args):
+    checkproper(args)
     return self.fn(env, args)
 
 class Closure:
@@ -143,22 +150,36 @@ class Closure:
   def __str__(self):
     return '#(closure)'
   def __call__(self, env, args):
+    def defineinto(p, a, env):
+      env.define(p.car, a.car)
+      if isinstance(p.cdr, Symbol):
+        env.define(p.cdr, a.cdr)
+      elif isinstance(p.cdr, Pair):
+        defineinto(p.cdr, a.cdr, env)
+    checkproper(args)
     nenv = Env(self.env)
+    pl = self.params.length()
+    al = args.length()
     # variable arg lambda
     if isinstance(self.params, Symbol):
       nenv.define(self.params, args)
     # list of params
-    elif isinstance(self.params, Pair): 
-      p, a = self.params, args
-      pcar, pcdr = p.car, p.cdr
-      acar, acdr = a.car, a.cdr
-      nenv.define(pcar, acar)
-      if not isinstance(pcdr, Pair) and pcdr is not Null:
-        nenv.define(pcdr, acdr)
-      while pcdr is not Null:
-        pcar, pcdr = pcdr.car, pcdr.cdr
-        acar, acdr = acdr.car, acdr.cdr
-        nenv.define(pcar, acar)
+    elif isinstance(self.params, Pair):
+      # no rest argument
+      if self.params.proper:
+        if pl != al:
+          error("function requires %d arguments, given %d" % (pl, al))
+        else:
+          defineinto(self.params, args, nenv)
+      # rest argument
+      else:
+        if al < pl:
+          error("function requires at least %d arguments, given %d" % (pl, al))
+        else:
+          defineinto(self.params, args, nenv)
+    else:
+      if al != 0:
+        error("function takes no arguments, given %d" % al)
     ret = Undef
     for form in self.body.each():
       ret = form.eval(nenv)
@@ -409,10 +430,16 @@ def error(s):
 def define(env, exp):
   sym = exp.car
   val = exp.cdr.car
-  if not symbolp(sym):
-    raise KuaoException, "error: arg #1 must be symbol"
-  e = val.eval(env)
-  env.define(sym, e)
+  if isinstance(sym, Pair):
+    name = sym.car
+    args = sym.cdr
+    closure = Pair(Symbol('lambda'), Pair(args, Pair(val, Null)))
+    env.define(name, closure.eval(env))
+  elif isinstance(sym, Symbol):
+    e = val.eval(env)
+    env.define(sym, e)
+  else:
+    error("error: arg #1 must be symbol or list")
   return Undef
 
 def setf(env, exp):
@@ -502,14 +529,14 @@ def mklambda(env, exp):
 
 def car(env, exp):
   if exp is Null:
-    error('car requires 1 argument')
+    error("'car' requires 1 argument")
   if not isinstance(exp.car, Pair):
     error('cannot take car of non-pair')
   return exp.car.car
 
 def cdr(env, exp):
   if exp is Null:
-    error('cdr requires 1 argument')
+    error("'cdr' requires 1 argument")
   if exp.car is Null or not isinstance(exp.car, Pair):
     error('cannot take cdr of non-pair')
   return exp.car.cdr
@@ -521,6 +548,11 @@ def cons(env, exp):
   a = exp.car
   b = exp.cdr.car
   return Pair(a, b)
+
+def nullp(env, exp):
+  if exp is Null:
+    error("'null?' requires 1 argument")
+  return T if exp.car is Null else F
 
 toplevel = Env().merge({
   Symbol('define') : Special(define),
@@ -535,7 +567,8 @@ toplevel = Env().merge({
   Symbol('quote')  : Special(quote),
   Symbol('car')    : Primitive(car),
   Symbol('cdr')    : Primitive(cdr),
-  Symbol('cons')   : Primitive(cons)
+  Symbol('cons')   : Primitive(cons),
+  Symbol('null?')  : Primitive(nullp)
 })
 
 def repl(p, interactive=True):
@@ -555,8 +588,6 @@ def repl(p, interactive=True):
         print e
       else:
         raise e
-    except Exception as e:
-      print 'error: %s' % e
 
 def main():
   strm = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin

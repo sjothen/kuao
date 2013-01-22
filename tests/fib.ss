@@ -9,4 +9,4 @@
             (+ (fib (- n 1)) (fib (- n 2))))))) ; return F_(n-1) + F_(n-2)
 
 (display (fib 13))
-(display ; "\n")
+(display "\n")
