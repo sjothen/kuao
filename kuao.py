@@ -3,34 +3,6 @@
 import sys
 import string
 
-class Token:
-  LPAREN = 0
-  RPAREN = 1
-  STRING = 2
-  NUMBER = 3
-  SYMBOL = 4
-  BOOLEAN = 5
-  def __init__(self, tag, value=None):
-    self.tag = tag
-    self.value = value
-  def __str__(self):
-    if self.tag == self.STRING:
-      return '"' + self.value + '"'
-    elif self.tag == self.SYMBOL:
-      return self.value
-    elif self.tag == self.NUMBER:
-      return str(self.value)
-    elif self.tag == self.BOOLEAN:
-      if self.value:
-        return '#t'
-      else:
-        return '#f'
-  def __repr__(self):
-    if self.value:
-      return '%d(%s)' % (self.tag, self.value)
-    else:
-      return '%d' % (self.tag,)
-
 class String:
   def __init__(self, value):
     self.value = value
@@ -69,8 +41,12 @@ class Boolean:
 class List:
   def __init__(self, value):
     self.value = value
+  def car(self):
+    return self.value[0]
+  def cdr(self):
+    return self.value[1:]
   def __str__(self):
-    pass
+    return "(" + " ".join(map(str, self.value)) + ")"
 
 class NullType:
   def __init__(self):
@@ -86,25 +62,39 @@ class Pair:
   def __init__(self, car, cdr):
     self.car, self.cdr = car, cdr
   def __str__(self):
-    pass
+    def insides(car, cdr):
+      if isinstance(cdr, Pair):
+        return str(car) + ' ' + insides(cdr.car, cdr.cdr)
+      elif cdr is Null:
+        return str(car)
+      else:
+        return str(car) + ' . ' + str(cdr)
+    return '(' + insides(self.car, self.cdr) + ')'
+
+#print Pair(Number(1), Pair(Pair(Number(1), Null), Pair(Number(2), Number(3))))
+#print Pair(Number(1), Number(2))
 
 def listp(e):
-  return isinstance(e, list)
+  return isinstance(e, List)
+
 def symbolp(e):
-  return e.tag == Token.SYMBOL
+  return isinstance(e, Symbol)
+
 def stringp(e):
-  return e.tag == Token.STRING
+  return isinstance(e, String)
+
 def numberp(e):
-  return e.tag == Token.NUMBER
+  return isinstance(e, Number)
+
 def booleanp(e):
-  return e.tag == Token.BOOLEAN
+  return isinstance(e, Boolean)
 
 class Reader:
   def __init__(self, strm):
     self.stream = strm
     self.ch = None
   def peek(self):
-    if self.ch == None:
+    if self.ch is None:
       self.nxt()
     return self.ch
   def nxt(self):
@@ -117,27 +107,40 @@ class LexerException(Exception):
 class Lexer:
   def __init__(self, strm):
     self.rdr = Reader(strm)
+    self.buf = []
+  def get(self):
+    if self.buf:
+      fst, rest = self.buf[0], self.buf[1:]
+      self.buf = rest
+      return fst
+    else:
+      return self.token()
+  def unget(self, t):
+    self.buf.append(t)
   def token(self):
     r = self.rdr
     c = r.peek()
     if not c:
       return None
-    elif c == '(':
+    elif c == '(' or c == ')':
       r.nxt()
-      return Token(Token.LPAREN)
-    elif c == ')':
+      return c 
+    elif c == '\'':
       r.nxt()
-      return Token(Token.RPAREN)
+      return c
+    elif c == '.':
+      r.nxt()
+      return c
     elif c == '"':
       r.nxt()
-      return Token(Token.STRING, self.readstr())
+      return String(self.readstr())
     elif c == '#':
       r.nxt()
-      return Token(Token.BOOLEAN, self.readbool())
+      return Boolean(self.readbool())
     elif c in string.digits:
-      return Token(Token.NUMBER, self.readnum())
+      return Number(self.readnum())
     elif c in string.ascii_letters or c in '!?%*+-.:<=>^_~/\\':
-      return Token(Token.SYMBOL, self.readsym())
+      return Symbol(self.readsym())
     elif c in string.whitespace:
       self.skipws()
       return self.token()
@@ -211,28 +214,53 @@ class ParserException(Exception):
 class Parser:
   def __init__(self, lex):
     self.lexer = lex
-  def read(self):
-    tok = self.lexer.token()
-    if not tok:
-      return None
-    if tok.tag in [Token.STRING, Token.NUMBER, Token.SYMBOL, Token.BOOLEAN]:
-      return tok
-    if tok.tag == Token.LPAREN:
-      return self.readlist()
-    if tok.tag == Token.RPAREN:
-      raise ParserException, "unexpected RPAREN"
-  def readlist(self):
-    l = []
-    while True:
-      tok = self.lexer.token()
-      if not tok:
-        raise ParserException, "unexpected EOF"
-      if tok.tag == Token.RPAREN:
-        return l
-      if tok.tag == Token.LPAREN:
-        l.append(self.readlist())
-      else:
-        l.append(tok)
+  def error(self, s):
+    raise ParserException, s
+  def atomp(self, t):
+    return self.oneof(t, [String, Boolean, Symbol, Number])
+  def oneof(self, tok, ts):
+    return any(map(lambda t: isinstance(tok, t), ts))
+  def sexp(self):
+    # sexp : STRING
+    #      | BOOLEAN
+    #      | SYMBOL
+    #      | NUMBER
+    #      | pair
+    #      | '\'' sexp
+    t = self.lexer.get()
+    if t is None:
+      return t
+    if self.atomp(t):
+      return t
+    elif t == '(':
+      return self.pair()
+    elif t == '\'':
+      s = self.sexp()
+      return Pair(Symbol('quote'), Pair(s, Null))
+    else:
+      self.error("unexpected token '%s'" % t)
+  def pair(self):
+    # pair : '(' sexp* ')'
+    #      | '(' sexp+ . sexp ')'
+    t = self.lexer.get()
+    if t == ')':
+      return Null
+    elif t == '\'':
+      self.lexer.unget(t)
+      s = self.sexp()
+      return Pair(s, self.pair())
+    elif self.atomp(t):
+      return Pair(t, self.pair())
+    elif t == '.':
+      s = self.sexp()
+      t = self.lexer.get()
+      if t != ')':
+        self.error("expected token ')', got '%s'" % t)
+      return s
+    else:
+      fst = self.pair()
+      snd = self.pair()
+      return Pair(fst, snd)
 
 class KuaoException(Exception):
   pass
@@ -276,6 +304,12 @@ class Env:
     if self.parent:
       self.parent.printe(indent+2)
 
+class Builtin:
+  def __init__(self, fn):
+    self.function = fn
+  def eval(self, args):
+    pass
+
 class Closure:
   def __init__(self, env, params, body):
     self.env = env
@@ -305,11 +339,11 @@ toplevel = Env()
 
 def kuaoeval(env, exp):
   if listp(exp):
-    if len(exp) == 0:
+    if len(exp.value) == 0:
       return exp
     else:
-      car = kuaoeval(env, exp[0])
-      cdr = exp[1:]
+      car = kuaoeval(env, exp.value[0])
+      cdr = exp.value[1:]
       print car, cdr
       if callable(car):
         return car(env, cdr)
@@ -519,18 +553,19 @@ def repl(p, interactive=True):
     # Can't use print with ,: it forces leading space next print
     if interactive:
       sys.stdout.write('kuao> ')
-    sexp = p.read()
+    sexp = p.sexp()
     if sexp is None:
       break
-    try:
-      ret = kuaoeval(toplevel, sexp)
-      if ret is not None and interactive:
-        kuaoprint(ret)
-    except KuaoException as e:
-      if interactive:
-        print e
-      else:
-        raise e
+    print sexp
+    #try:
+      #ret = kuaoeval(toplevel, sexp)
+      #if ret is not None and interactive:
+      #  kuaoprint(ret)
+    #except KuaoException as e:
+    #  if interactive:
+    #    print e
+    #  else:
+    #    raise e
 
 def main():
   strm = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin
