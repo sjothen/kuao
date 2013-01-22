@@ -65,6 +65,7 @@ class NullType:
     return self
   def eval(self, env):
     return self
+    #error("illegal empty application")
 
 Null = NullType()
 
@@ -483,22 +484,6 @@ def checktype(scope, exp, typ):
   if not isinstance(exp, typ):
     error("argument to '%s' must be of type '%s'" % (scope, typ))
 
-def numeq(env, exp):
-  if exp.length() < 2:
-    error("'=' requires at least 2 arguments")
-  fst = exp.car
-  checktype('=', fst, Number)
-  snd = exp.cdr.car
-  checktype('=', snd, Number)
-  if fst != snd:
-    return F
-  else:
-    es = exp.cdr.cdr
-    for num in es.each():
-      if num != fst:
-        return F
-    return T
-
 def plus(env, exp):
   n = Number(0)
   for m in exp.each():
@@ -565,6 +550,33 @@ def knot(env, exp):
   p = exp.car
   return T if p is F else F
 
+def comp(name, env, exp, comp):
+  if exp.length() < 2:
+    error("'%s' requires at least 2 arguments" % name)
+  fst = exp.car
+  checktype(name, fst, Number)
+  for n in exp.cdr.each():
+    checktype(name, n, Number)
+    if not comp(fst.value, n.value):
+      return F
+    fst = n
+  return T
+
+def lt(env, exp):
+  return comp('<', env, exp, lambda a, b: a < b)
+
+def gt(env, exp):
+  return comp('>', env, exp, lambda a, b: a > b)
+
+def lte(env, exp):
+  return comp('<=', env, exp, lambda a, b: a <= b)
+
+def gte(env, exp):
+  return comp('>=', env, exp, lambda a, b: a >= b)
+
+def numeq(env, exp):
+  return comp('=', env, exp, lambda a, b: a == b)
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
@@ -575,6 +587,10 @@ toplevel = Env().merge({
   Symbol('+')      : Primitive(plus),
   Symbol('*')      : Primitive(multiply),
   Symbol('-')      : Primitive(subtract),
+  Symbol('<')      : Primitive(lt),
+  Symbol('>')      : Primitive(gt),
+  Symbol('<=')     : Primitive(lte),
+  Symbol('>=')     : Primitive(gte),
   Symbol('lambda') : Special(mklambda),
   Symbol('quote')  : Special(quote),
   Symbol('car')    : Primitive(car),
