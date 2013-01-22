@@ -250,7 +250,7 @@ class Lexer:
       return String(self.readstr())
     elif c == '#':
       r.nxt()
-      return Boolean(self.readbool())
+      return self.readbool()
     elif c in string.digits:
       return Number(self.readnum())
     elif c in string.ascii_letters or c in '!?%*+-.:<=>^_~/\\':
@@ -320,10 +320,10 @@ class Lexer:
     c = r.peek()
     if c == 't':
       r.nxt()
-      return True
+      return T
     elif c == 'f':
       r.nxt()
-      return False
+      return F
     else:
       raise LexerException, 'boolean must be #t or #f'
 
@@ -555,10 +555,21 @@ def nullp(env, exp):
     error("'null?' requires 1 argument")
   return T if exp.car is Null else F
 
+def begin(env, exp):
+  p = Pair(Pair(Symbol('lambda'), Pair(Null, exp)), Null)
+  return p.eval(env)
+
+def knot(env, exp):
+  if exp is Null:
+    error("'not' requires 1 argument")
+  p = exp.car
+  return T if p is F else F
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
   Symbol('if')     : Special(runif),
+  Symbol('begin')  : Special(begin),
   Symbol('display'): Primitive(display),
   Symbol('=')      : Primitive(numeq),
   Symbol('+')      : Primitive(plus),
@@ -569,7 +580,8 @@ toplevel = Env().merge({
   Symbol('car')    : Primitive(car),
   Symbol('cdr')    : Primitive(cdr),
   Symbol('cons')   : Primitive(cons),
-  Symbol('null?')  : Primitive(nullp)
+  Symbol('null?')  : Primitive(nullp),
+  Symbol('not')    : Primitive(knot)
 })
 
 def repl(p, interactive=True):
