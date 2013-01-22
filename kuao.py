@@ -382,9 +382,6 @@ class Env:
     if self.parent:
       self.parent.printe(indent+2)
 
-def closurep(exp):
-  return isinstance(exp, Closure)
-
 def error(s):
   raise KuaoException, s
 
@@ -401,15 +398,20 @@ def setf(env, exp):
   sym = exp.car
   val = exp.cdr.car
   if not symbolp(sym):
-    raise KuaoException, "error: arg #1 must be symbol"
+    error("error: arg #1 must be symbol")
   e = val.eval(env)
   env.update(sym, e)
   return Undef
 
 def display(env, exp):
-  val = exp.car.eval(env)
+  val = exp.car
   sys.stdout.write(val.value if isinstance(val, String) else str(val))
   return Undef
+
+def quote(env, exp):
+  if exp is Null or exp.cdr is not Null:
+    error("'quote' requires 1 arg")
+  return exp.car
 
 def runif(env, exp):
   if exp.length() < 2:
