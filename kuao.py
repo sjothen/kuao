@@ -476,7 +476,7 @@ def mklambda(env, exp):
   if exp is Null or exp.cdr is Null:
     error("lambda requires 2 arguments")
   args = exp.car
-  body = exp.cdr.car
+  body = exp.cdr
   return Closure(env, args, body)
 
 toplevel = Env().merge({
@@ -502,7 +502,7 @@ def repl(p, interactive=True):
       break
     try:
       ret = sexp.eval(toplevel)
-      if ret not in [None, Undef] and interactive:
+      if ret is not Undef and interactive:
         print ret
     except KuaoException as e:
       if interactive:
