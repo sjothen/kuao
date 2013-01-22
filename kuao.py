@@ -472,6 +472,13 @@ def subtract(env, exp):
     n = Number(n.value - m.value)
   return n
 
+def mklambda(env, exp):
+  if exp is Null or exp.cdr is Null:
+    error("lambda requires 2 arguments")
+  args = exp.car
+  body = exp.cdr.car
+  return Closure(env, args, body)
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
@@ -480,7 +487,9 @@ toplevel = Env().merge({
   Symbol('=')      : Primitive(numeq),
   Symbol('+')      : Primitive(plus),
   Symbol('*')      : Primitive(multiply),
-  Symbol('-')      : Primitive(subtract)
+  Symbol('-')      : Primitive(subtract),
+  Symbol('lambda') : Special(mklambda),
+  Symbol('quote')  : Special(quote)
 })
 
 def repl(p, interactive=True):
