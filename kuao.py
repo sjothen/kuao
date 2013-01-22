@@ -433,7 +433,8 @@ def define(env, exp):
   if isinstance(sym, Pair):
     name = sym.car
     args = sym.cdr
-    closure = Pair(Symbol('lambda'), Pair(args, Pair(val, Null)))
+    body = exp.cdr
+    closure = Pair(Symbol('lambda'), Pair(args, exp.cdr))
     env.define(name, closure.eval(env))
   elif isinstance(sym, Symbol):
     e = val.eval(env)
