@@ -188,9 +188,6 @@ class Closure:
       ret = form.eval(nenv)
     return ret
 
-def pairp(e):
-  return isinstance(e, List)
-
 def symbolp(e):
   return isinstance(e, Symbol)
 
@@ -635,6 +632,20 @@ def let(env, exp):
   p = Pair(Pair(Symbol('lambda'), Pair(pars, body)), args)
   return p.eval(env)
 
+def pairp(env, exp):
+  length = exp.length()
+  if length != 1:
+    error("'pair?' requires 1 argument, given %d" % length)
+  arg = exp.car
+  return T if isinstance(arg, Pair) else F
+
+def listp(env, exp):
+  length = exp.length()
+  if length != 1:
+    error("'list?' requires 1 argument, given %d" % length)
+  arg = exp.car
+  return T if (isinstance(arg, Pair) and arg.proper) or arg is Null else F
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
@@ -659,7 +670,9 @@ toplevel = Env().merge({
   Symbol('apply')  : Primitive(kapply),
   Symbol('and')    : Special(kand),
   Symbol('or')     : Special(kor),
-  Symbol('let')    : Special(let)
+  Symbol('let')    : Special(let),
+  Symbol('pair?')  : Primitive(pairp),
+  Symbol('list?')  : Primitive(listp)
 })
 
 def repl(strm, interactive=True):
