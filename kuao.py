@@ -276,6 +276,7 @@ class Lexer:
       r.nxt()
   def readstr(self):
     esc = {
+      '\\': '\\',
       '"': '"',
       'n': '\n',
       'r': '\r',
@@ -290,7 +291,7 @@ class Lexer:
         # Escape code \n \r \f etc
         r.nxt()
         if r.peek() not in esc:
-          raise LexerException, "unknown escape code %s" % (r.peek(),)
+          raise LexerException, "unknown escape code '%s' in string" % (r.peek(),)
         else:
           s += esc[r.peek()]
           r.nxt()
@@ -426,6 +427,11 @@ class Env:
 
 def error(s):
   raise KuaoException, 'error: %s' % s
+
+def check(name, exp, nargs):
+  length = exp.length()
+  if length != nargs:
+    error("'%s' requires %d args, got %d" % (name, nargs, length))
 
 def define(env, exp):
   sym = exp.car
@@ -602,14 +608,6 @@ def kor(env, exp):
     ret = ev
   return ret
 
-def load(env, exp):
-  length = exp.length()
-  if length != 1:
-    error("'load' requires 1 argument, given %d" % length)
-  f = exp.car
-  checktype('load', f, String)
-  return Undef
-
 def let(env, exp):
   length = exp.length()
   if length < 2:
@@ -633,18 +631,28 @@ def let(env, exp):
   return p.eval(env)
 
 def pairp(env, exp):
-  length = exp.length()
-  if length != 1:
-    error("'pair?' requires 1 argument, given %d" % length)
+  check('pair?', exp, 1)
   arg = exp.car
   return T if isinstance(arg, Pair) else F
 
 def listp(env, exp):
-  length = exp.length()
-  if length != 1:
-    error("'list?' requires 1 argument, given %d" % length)
+  check('list?', exp, 1)
   arg = exp.car
   return T if (isinstance(arg, Pair) and arg.proper) or arg is Null else F
+
+def eqvp(env, exp):
+  check('eqv?', exp, 2)
+  arg1 = exp.car
+  arg2 = exp.cdr.car
+  if arg1.__class__ != arg2.__class__:
+    return F
+  else:
+    if isinstance(arg1, Symbol) or isinstance(arg1, Number):
+      return T if arg1 == arg2 else F
+    elif arg1 is Null:
+      return T
+    else:
+      return T if arg1 is arg2 else F
 
 toplevel = Env().merge({
   Symbol('define') : Special(define),
@@ -672,7 +680,8 @@ toplevel = Env().merge({
   Symbol('or')     : Special(kor),
   Symbol('let')    : Special(let),
   Symbol('pair?')  : Primitive(pairp),
-  Symbol('list?')  : Primitive(listp)
+  Symbol('list?')  : Primitive(listp),
+  Symbol('eqv?')   : Primitive(eqvp)
 })
 
 def repl(strm, interactive=True):
