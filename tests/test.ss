@@ -7,4 +7,4 @@
 (define adder (make-adder 0))
 
 (display (adder 10))
-(display "\n")
+(newline)

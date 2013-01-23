@@ -7,7 +7,7 @@
 
 (define (println x)
   (display x)
-  (display "\n"))
+  (newline))
 
 (define xs '(1 2 3 4 5 6 7 8))
 

@@ -11,10 +11,10 @@
 
 (begin
   (display (length a))
-  (display "\n")
+  (newline)
   (display (length b))
-  (display "\n")
+  (newline)
   (display (length c))
-  (display "\n")
+  (newline)
   (display (length d))
-  (display "\n"))
+  (newline))

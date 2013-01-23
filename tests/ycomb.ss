@@ -21,7 +21,7 @@
             (+ (f (- x 1)) (f (- x 2))))))))
  
 (display (fac 6))
-(display "\n")
- 
+(newline)
+
 (display (fib 6))
-(display "\n")
+(newline)

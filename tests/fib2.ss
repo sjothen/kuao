@@ -5,4 +5,4 @@
         (+ (fib (- n 1)) (fib (- n 2))))))
 
 (display (fib 13))
-(display "\n")
+(newline)

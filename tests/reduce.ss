@@ -8,4 +8,4 @@
 
 (define xs (quote (1 2 3)))
 (display (sum xs))
-(display "\n")
+(newline)
