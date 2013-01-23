@@ -13,3 +13,10 @@
 
 (println xs)
 (println (map (lambda (x) (+ 1 x)) xs))
+
+; test closure outliving parent
+(define (make-adder n)
+  (lambda (x) (+ x n)))
+
+(println (map (make-adder 1)
+              xs))

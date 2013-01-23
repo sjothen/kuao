@@ -138,7 +138,7 @@ class Primitive:
   def __init__(self, fn):
     self.fn = fn
   def __str__(self):
-    return '#(primitive)'
+    return '#(primitive %s)' % self.fn.__name__
   def __call__(self, env, args):
     checkproper(args)
     return self.fn(env, args)
@@ -604,6 +604,36 @@ def kor(env, exp):
     ret = ev
   return ret
 
+def load(env, exp):
+  length = exp.length()
+  if length != 1:
+    error("'load' requires 1 argument, given %d" % length)
+  f = exp.car
+  checktype('load', f, String)
+  return Undef
+
+def let(env, exp):
+  length = exp.length()
+  if length < 2:
+    error("'let' syntax requires at least 2 arguments, given %d" % length)
+  tups = exp.car
+  body = exp.cdr
+  if not isinstance(tups, Pair) or not tups.proper:
+    if tups is not Null:
+      error("1st argument of 'let' isn't a proper list")
+  def getfn(tuples, fn):
+    if tuples is Null:
+      return Null
+    else:
+      pararg = tuples.car
+      if not isinstance(pararg, Pair) or pararg.length() != 2 or not pararg.proper:
+        error("key-value pair in 'let' must be proper list of length 2")
+      return Pair(fn(pararg), getfn(tuples.cdr, fn))
+  pars = getfn(tups, lambda t: t.car)
+  args = getfn(tups, lambda t: t.cdr.car)
+  p = Pair(Pair(Symbol('lambda'), Pair(pars, body)), args)
+  return p.eval(env)
+
 toplevel = Env().merge({
   Symbol('define') : Special(define),
   Symbol('set!')   : Special(setf),
@@ -627,10 +657,12 @@ toplevel = Env().merge({
   Symbol('not')    : Primitive(knot),
   Symbol('apply')  : Primitive(kapply),
   Symbol('and')    : Special(kand),
-  Symbol('or')     : Special(kor)
+  Symbol('or')     : Special(kor),
+  Symbol('let')    : Special(let)
 })
 
-def repl(p, interactive=True):
+def repl(strm, interactive=True):
+  p = Parser(Lexer(strm))
   while True:
     # Can't use print with ,: it forces leading space next print
     if interactive:
@@ -650,9 +682,7 @@ def repl(p, interactive=True):
 
 def main():
   strm = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin
-  lexer = Lexer(strm)
-  parser = Parser(lexer)
-  repl(parser, strm is sys.stdin)
+  repl(strm, strm is sys.stdin)
 
 if __name__ == '__main__':
   main()
