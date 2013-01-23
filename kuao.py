@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import sys
 import string
 import itertools as it
@@ -682,6 +683,9 @@ def repl(strm, interactive=True):
 
 def main():
   strm = open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin
+  # Hack to load the boot file
+  boot = os.path.dirname(os.path.abspath(__file__)) + '/boot.ss'
+  repl(open(boot), False)
   repl(strm, strm is sys.stdin)
 
 if __name__ == '__main__':
