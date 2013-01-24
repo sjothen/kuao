@@ -127,20 +127,21 @@ def checkproper(xs):
     error("application with improper list not allowed")
 
 class Special:
-  def __init__(self, fn):
+  def __init__(self, fn, name):
     self.fn = fn
+    self.name = name
   def __str__(self):
-    return '#(special)'
+    return '#(syntax %s)' % self.name
   def __call__(self, env, args):
     checkproper(args)
     return self.fn(env, args)
 
 class Primitive:
-  def __init__(self, fn, name=None):
+  def __init__(self, fn, name):
     self.fn = fn
     self.name = name
   def __str__(self):
-    return '#(primitive %s)' % self.name or self.fn.__name__
+    return '#(primitive %s)' % self.name
   def __call__(self, env, args):
     checkproper(args)
     return self.fn(env, args)
@@ -445,6 +446,23 @@ def check(name, exp, nargs):
   if length != nargs:
     error("'%s' requires %d args, got %d" % (name, nargs, length))
 
+toplevel = Env()
+
+def special(name):
+  def wrapper(fn, name=name):
+    global toplevel
+    toplevel.define(Symbol(name), Special(fn, name))
+    return fn
+  return wrapper
+
+def primitive(name):
+  def wrapper(fn, name=name):
+    global toplevel
+    toplevel.define(Symbol(name), Primitive(fn, name))
+    return fn
+  return wrapper
+
+@special('define')
 def define(env, exp):
   sym = exp.car
   val = exp.cdr.car
@@ -462,6 +480,7 @@ def define(env, exp):
     error("error: arg #1 must be symbol or list")
   return Undef
 
+@special('set!')
 def setf(env, exp):
   sym = exp.car
   val = exp.cdr.car
@@ -471,16 +490,19 @@ def setf(env, exp):
   env.update(sym, e)
   return Undef
 
+@primitive('display')
 def display(env, exp):
   val = exp.car
   sys.stdout.write(val.value if isinstance(val, String) else str(val))
   return Undef
 
+@special('quote')
 def quote(env, exp):
   if exp is Null or exp.cdr is not Null:
     error("'quote' requires 1 arg")
   return exp.car
 
+@special('if')
 def runif(env, exp):
   if exp.length() < 2:
     error("'if' requires 2 or 3 arguments")
@@ -506,18 +528,21 @@ def checktype(scope, exp, typ):
   if not isinstance(exp, typ):
     error("argument to '%s' must be of type '%s'" % (scope, typ))
 
+@primitive('+')
 def plus(env, exp):
   n = Number(0)
   for m in exp.each():
     n = Number(n.value + m.value)
   return n
 
+@primitive('*')
 def multiply(env, exp):
   n = Number(1)
   for m in exp.each():
     n = Number(n.value * m.value)
   return n
 
+@primitive('-')
 def subtract(env, exp):
   if exp is Null:
     error("'-' requires at least 1 argument")
@@ -528,6 +553,7 @@ def subtract(env, exp):
     n = Number(n.value - m.value)
   return n
 
+@special('lambda')
 def mklambda(env, exp):
   if exp is Null or exp.cdr is Null:
     error("lambda requires 2 arguments")
@@ -535,6 +561,7 @@ def mklambda(env, exp):
   body = Pair(Symbol('begin'), exp.cdr)
   return Closure(env, args, body)
 
+@primitive('car')
 def car(env, exp):
   if exp is Null:
     error("'car' requires 1 argument")
@@ -542,6 +569,7 @@ def car(env, exp):
     error('cannot take car of non-pair')
   return exp.car.car
 
+@primitive('cdr')
 def cdr(env, exp):
   if exp is Null:
     error("'cdr' requires 1 argument")
@@ -549,6 +577,7 @@ def cdr(env, exp):
     error('cannot take cdr of non-pair')
   return exp.car.cdr
 
+@primitive('cons')
 def cons(env, exp):
   arglen = exp.length()
   if arglen != 2:
@@ -557,11 +586,13 @@ def cons(env, exp):
   b = exp.cdr.car
   return Pair(a, b)
 
+@primitive('null?')
 def nullp(env, exp):
   if exp is Null:
     error("'null?' requires 1 argument")
   return T if exp.car is Null else F
 
+@special('begin')
 def begin(env, exp):
   ret = Undef
   for form in exp.each():
@@ -569,6 +600,7 @@ def begin(env, exp):
     ret = form.eval(env)
   return ret
 
+@primitive('not')
 def knot(env, exp):
   if exp is Null:
     error("'not' requires 1 argument")
@@ -587,21 +619,27 @@ def comp(name, env, exp, comp):
     fst = n
   return T
 
+@primitive('<')
 def lt(env, exp):
   return comp('<', env, exp, lambda a, b: a < b)
 
+@primitive('>')
 def gt(env, exp):
   return comp('>', env, exp, lambda a, b: a > b)
 
+@primitive('<=')
 def lte(env, exp):
   return comp('<=', env, exp, lambda a, b: a <= b)
 
+@primitive('>=')
 def gte(env, exp):
   return comp('>=', env, exp, lambda a, b: a >= b)
 
+@primitive('=')
 def numeq(env, exp):
   return comp('=', env, exp, lambda a, b: a == b)
 
+@primitive('apply')
 def kapply(env, exp):
   length = exp.length()
   if length != 2:
@@ -610,6 +648,7 @@ def kapply(env, exp):
   lst = exp.cdr.car
   return fn(env, lst)
 
+@primitive('and')
 def kand(env, exp):
   ret = T
   for e in exp.each():
@@ -619,6 +658,7 @@ def kand(env, exp):
     ret = ev
   return ret
 
+@primitive('or')
 def kor(env, exp):
   ret = F
   for e in exp.each():
@@ -628,6 +668,7 @@ def kor(env, exp):
     ret = ev
   return ret
 
+@special('let')
 def let(env, exp):
   length = exp.length()
   if length < 2:
@@ -650,16 +691,19 @@ def let(env, exp):
   p = Pair(Pair(Symbol('lambda'), Pair(pars, body)), args)
   return p.eval(env)
 
+@primitive('pair?')
 def pairp(env, exp):
   check('pair?', exp, 1)
   arg = exp.car
   return T if isinstance(arg, Pair) else F
 
+@primitive('list?')
 def listp(env, exp):
   check('list?', exp, 1)
   arg = exp.car
   return T if (isinstance(arg, Pair) and arg.proper) or arg is Null else F
 
+@primitive('eqv?')
 def eqvp(env, exp):
   check('eqv?', exp, 2)
   arg1 = exp.car
@@ -673,36 +717,6 @@ def eqvp(env, exp):
       return T
     else:
       return T if arg1 is arg2 else F
-
-toplevel = Env().merge({
-  Symbol('define') : Special(define),
-  Symbol('set!')   : Special(setf),
-  Symbol('if')     : Special(runif),
-  Symbol('begin')  : Special(begin),
-  Symbol('display'): Primitive(display),
-  Symbol('=')      : Primitive(numeq, '='),
-  Symbol('+')      : Primitive(plus, '+'),
-  Symbol('*')      : Primitive(multiply, '*'),
-  Symbol('-')      : Primitive(subtract, '-'),
-  Symbol('<')      : Primitive(lt, '<'),
-  Symbol('>')      : Primitive(gt, '>'),
-  Symbol('<=')     : Primitive(lte, '<='),
-  Symbol('>=')     : Primitive(gte, '>='),
-  Symbol('lambda') : Special(mklambda),
-  Symbol('quote')  : Special(quote),
-  Symbol('car')    : Primitive(car),
-  Symbol('cdr')    : Primitive(cdr),
-  Symbol('cons')   : Primitive(cons),
-  Symbol('null?')  : Primitive(nullp, 'null?'),
-  Symbol('not')    : Primitive(knot, 'not'),
-  Symbol('apply')  : Primitive(kapply, 'apply'),
-  Symbol('and')    : Special(kand),
-  Symbol('or')     : Special(kor),
-  Symbol('let')    : Special(let),
-  Symbol('pair?')  : Primitive(pairp, 'pair?'),
-  Symbol('list?')  : Primitive(listp, 'list?'),
-  Symbol('eqv?')   : Primitive(eqvp)
-})
 
 def tramp(t):
   while isinstance(t, Recurse):
