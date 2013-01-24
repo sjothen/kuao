@@ -446,6 +446,10 @@ def check(name, exp, nargs):
   if length != nargs:
     error("'%s' requires %d args, got %d" % (name, nargs, length))
 
+def checktype(scope, exp, typ):
+  if not isinstance(exp, typ):
+    error("argument to '%s' must be of type '%s'" % (scope, typ))
+
 toplevel = Env()
 
 def special(name):
@@ -523,10 +527,6 @@ def runif(env, exp):
   else:
     #return kevalt(env, true)
     return true.eval(env)
-
-def checktype(scope, exp, typ):
-  if not isinstance(exp, typ):
-    error("argument to '%s' must be of type '%s'" % (scope, typ))
 
 @primitive('+')
 def plus(env, exp):
