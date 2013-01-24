@@ -474,11 +474,12 @@ def define(env, exp):
     name = sym.car
     args = sym.cdr
     body = exp.cdr
-    closure = Pair(Symbol('lambda'), Pair(args, body)).eval(env)
+    closure = keval(env, Pair(Symbol('lambda'), Pair(args, body)))
     closure.name = name
     env.define(name, closure)
   elif isinstance(sym, Symbol):
-    e = val.eval(env)
+    # Force eval thru tramp, dont want to be lazy
+    e = tramp(keval(env, val))
     env.define(sym, e)
   else:
     error("error: arg #1 must be symbol or list")
@@ -490,15 +491,33 @@ def setf(env, exp):
   val = exp.cdr.car
   if not symbolp(sym):
     error("error: arg #1 must be symbol")
-  e = val.eval(env)
+  # Force eval
+  e = tramp(keval(env, val))
   env.update(sym, e)
   return Undef
 
-@primitive('display')
-def display(env, exp):
-  val = exp.car
-  sys.stdout.write(val.value if isinstance(val, String) else str(val))
-  return Undef
+@special('let')
+def let(env, exp):
+  length = exp.length()
+  if length < 2:
+    error("'let' syntax requires at least 2 arguments, given %d" % length)
+  tups = exp.car
+  body = exp.cdr
+  if not isinstance(tups, Pair) or not tups.proper:
+    if tups is not Null:
+      error("1st argument of 'let' isn't a proper list")
+  def getfn(tuples, fn):
+    if tuples is Null:
+      return Null
+    else:
+      pararg = tuples.car
+      if not isinstance(pararg, Pair) or pararg.length() != 2 or not pararg.proper:
+        error("key-value pair in 'let' must be proper list of length 2")
+      return Pair(fn(pararg), getfn(tuples.cdr, fn))
+  pars = getfn(tups, lambda t: t.car)
+  args = getfn(tups, lambda t: t.cdr.car)
+  p = Pair(Pair(Symbol('lambda'), Pair(pars, body)), args)
+  return p.eval(env)
 
 @special('quote')
 def quote(env, exp):
@@ -513,20 +532,42 @@ def runif(env, exp):
   cond = exp.car
   true = exp.cdr.car
   false = exp.cdr.cdr
-  e = cond.eval(env)
-  #e = kevalt(env, cond)
+  #e = cond.eval(env)
+  e = tramp(keval(env, cond))
   if isinstance(e, Boolean) and e.value:
-    return true.eval(env)
-    #return kevalt(env, true)
+    #return true.eval(env)
+    return keval(env, true)
   elif isinstance(e, Boolean) and not e.value:
     if false is Null:
       return Undef
     else:
-      #return kevalt(env, false.car)
-      return false.car.eval(env)
+      return keval(env, false.car)
+      #return false.car.eval(env)
   else:
-    #return kevalt(env, true)
-    return true.eval(env)
+    return keval(env, true)
+    #return true.eval(env)
+
+@special('lambda')
+def mklambda(env, exp):
+  if exp is Null or exp.cdr is Null:
+    error("lambda requires 2 arguments")
+  args = exp.car
+  body = Pair(Symbol('begin'), exp.cdr)
+  return Closure(env, args, body)
+
+@special('begin')
+def begin(env, exp):
+  ret = Undef
+  for form in exp.each():
+    ret = keval(env, form)
+    #ret = form.eval(env)
+  return ret
+
+@primitive('display')
+def display(env, exp):
+  val = exp.car
+  sys.stdout.write(val.value if isinstance(val, String) else str(val))
+  return Undef
 
 @primitive('+')
 def plus(env, exp):
@@ -552,14 +593,6 @@ def subtract(env, exp):
   for m in exp.cdr.each():
     n = Number(n.value - m.value)
   return n
-
-@special('lambda')
-def mklambda(env, exp):
-  if exp is Null or exp.cdr is Null:
-    error("lambda requires 2 arguments")
-  args = exp.car
-  body = Pair(Symbol('begin'), exp.cdr)
-  return Closure(env, args, body)
 
 @primitive('car')
 def car(env, exp):
@@ -591,14 +624,6 @@ def nullp(env, exp):
   if exp is Null:
     error("'null?' requires 1 argument")
   return T if exp.car is Null else F
-
-@special('begin')
-def begin(env, exp):
-  ret = Undef
-  for form in exp.each():
-    #ret = kevalt(env, form)
-    ret = form.eval(env)
-  return ret
 
 @primitive('not')
 def knot(env, exp):
@@ -668,29 +693,6 @@ def kor(env, exp):
     ret = ev
   return ret
 
-@special('let')
-def let(env, exp):
-  length = exp.length()
-  if length < 2:
-    error("'let' syntax requires at least 2 arguments, given %d" % length)
-  tups = exp.car
-  body = exp.cdr
-  if not isinstance(tups, Pair) or not tups.proper:
-    if tups is not Null:
-      error("1st argument of 'let' isn't a proper list")
-  def getfn(tuples, fn):
-    if tuples is Null:
-      return Null
-    else:
-      pararg = tuples.car
-      if not isinstance(pararg, Pair) or pararg.length() != 2 or not pararg.proper:
-        error("key-value pair in 'let' must be proper list of length 2")
-      return Pair(fn(pararg), getfn(tuples.cdr, fn))
-  pars = getfn(tups, lambda t: t.car)
-  args = getfn(tups, lambda t: t.cdr.car)
-  p = Pair(Pair(Symbol('lambda'), Pair(pars, body)), args)
-  return p.eval(env)
-
 @primitive('pair?')
 def pairp(env, exp):
   check('pair?', exp, 1)
@@ -718,30 +720,28 @@ def eqvp(env, exp):
     else:
       return T if arg1 is arg2 else F
 
-def tramp(t):
-  while isinstance(t, Recurse):
-    t = t()
-  return t
-
 def ziptoenv(pars, args, env):
   env.define(pars.car, args.car)
   if isinstance(pars.cdr, Symbol):
     env.define(pars.cdr, args.cdr)
   elif isinstance(pars.cdr, Pair):
     ziptoenv(pars.cdr, args.cdr, env)
- 
+
+def tramp(t):
+  while isinstance(t, Recurse):
+    t = t()
+  return t
+
+def kevalt(env, exp):
+  return tramp(keval(env, exp))
+
 def kevalpair(env, exp):
   if exp is Null:
     return Null
   else:
-    ecar = keval(env, exp.car)
+    # Tramp on the eval since argument to fn could be trampoline
+    ecar = kevalt(env, exp.car)
     return Pair(ecar, kevalpair(env, exp.cdr))
-
-def kevalt(env, exp):
-  t = keval(env, exp)
-  while isinstance(t, Recurse):
-    t = t()
-  return t
 
 def keval(env, exp):
   if isinstance(exp, (Number, String, Boolean)):
@@ -774,7 +774,8 @@ def keval(env, exp):
         ziptoenv(fn.params, args, nenv)
       elif fn.params is not Null:
         error("function params must be a symbol or list")
-      return keval(nenv, fn.body)
+      return Recurse(keval, nenv, fn.body)
+      #return keval(nenv, fn.body)
     else:
       error("cannot apply '%s' to '%s'" % (fn, exp.cdr))
   elif isinstance(exp, NullType):
@@ -791,8 +792,7 @@ def repl(strm, interactive=True):
       if sexp is None:
         break
       #ret = sexp.eval(toplevel)
-      ret = keval(toplevel, sexp)
-      #ret = tramp(ret)
+      ret = tramp(keval(toplevel, sexp))
       if ret is not Undef and interactive:
         print ret
     except KuaoException as e:
