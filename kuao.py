@@ -136,21 +136,33 @@ class Special:
     return self.fn(env, args)
 
 class Primitive:
-  def __init__(self, fn):
+  def __init__(self, fn, name=None):
     self.fn = fn
+    self.name = name
   def __str__(self):
-    return '#(primitive %s)' % self.fn.__name__
+    return '#(primitive %s)' % self.name or self.fn.__name__
   def __call__(self, env, args):
     checkproper(args)
     return self.fn(env, args)
+
+class Recurse:
+  def __init__(self, func, *args):
+    self.func = func
+    self.args = args
+  def __call__(self):
+    return self.func(*self.args)
 
 class Closure:
   def __init__(self, env, params, body):
     self.env = env
     self.params = params
     self.body = body
+    self.name = None
   def __str__(self):
-    return '#(closure)'
+    if not self.name:
+      return '#(lambda)'
+    else:
+      return '#(function %s)' % self.name
   def __call__(self, env, args):
     def defineinto(p, a, env):
       env.define(p.car, a.car)
@@ -160,7 +172,7 @@ class Closure:
         defineinto(p.cdr, a.cdr, env)
     checkproper(args)
     nenv = Env(self.env)
-   # variable arg lambda
+    # variable arg lambda
     if isinstance(self.params, Symbol):
       nenv.define(self.params, args)
     # list of params
@@ -440,8 +452,9 @@ def define(env, exp):
     name = sym.car
     args = sym.cdr
     body = exp.cdr
-    closure = Pair(Symbol('lambda'), Pair(args, exp.cdr))
-    env.define(name, closure.eval(env))
+    closure = Pair(Symbol('lambda'), Pair(args, body)).eval(env)
+    closure.name = name
+    env.define(name, closure)
   elif isinstance(sym, Symbol):
     e = val.eval(env)
     env.define(sym, e)
@@ -475,14 +488,18 @@ def runif(env, exp):
   true = exp.cdr.car
   false = exp.cdr.cdr
   e = cond.eval(env)
+  #e = kevalt(env, cond)
   if isinstance(e, Boolean) and e.value:
     return true.eval(env)
+    #return kevalt(env, true)
   elif isinstance(e, Boolean) and not e.value:
     if false is Null:
       return Undef
     else:
+      #return kevalt(env, false.car)
       return false.car.eval(env)
   else:
+    #return kevalt(env, true)
     return true.eval(env)
 
 def checktype(scope, exp, typ):
@@ -515,7 +532,7 @@ def mklambda(env, exp):
   if exp is Null or exp.cdr is Null:
     error("lambda requires 2 arguments")
   args = exp.car
-  body = exp.cdr
+  body = Pair(Symbol('begin'), exp.cdr)
   return Closure(env, args, body)
 
 def car(env, exp):
@@ -546,8 +563,11 @@ def nullp(env, exp):
   return T if exp.car is Null else F
 
 def begin(env, exp):
-  p = Pair(Pair(Symbol('lambda'), Pair(Null, exp)), Null)
-  return p.eval(env)
+  ret = Undef
+  for form in exp.each():
+    #ret = kevalt(env, form)
+    ret = form.eval(env)
+  return ret
 
 def knot(env, exp):
   if exp is Null:
@@ -660,29 +680,91 @@ toplevel = Env().merge({
   Symbol('if')     : Special(runif),
   Symbol('begin')  : Special(begin),
   Symbol('display'): Primitive(display),
-  Symbol('=')      : Primitive(numeq),
-  Symbol('+')      : Primitive(plus),
-  Symbol('*')      : Primitive(multiply),
-  Symbol('-')      : Primitive(subtract),
-  Symbol('<')      : Primitive(lt),
-  Symbol('>')      : Primitive(gt),
-  Symbol('<=')     : Primitive(lte),
-  Symbol('>=')     : Primitive(gte),
+  Symbol('=')      : Primitive(numeq, '='),
+  Symbol('+')      : Primitive(plus, '+'),
+  Symbol('*')      : Primitive(multiply, '*'),
+  Symbol('-')      : Primitive(subtract, '-'),
+  Symbol('<')      : Primitive(lt, '<'),
+  Symbol('>')      : Primitive(gt, '>'),
+  Symbol('<=')     : Primitive(lte, '<='),
+  Symbol('>=')     : Primitive(gte, '>='),
   Symbol('lambda') : Special(mklambda),
   Symbol('quote')  : Special(quote),
   Symbol('car')    : Primitive(car),
   Symbol('cdr')    : Primitive(cdr),
   Symbol('cons')   : Primitive(cons),
-  Symbol('null?')  : Primitive(nullp),
-  Symbol('not')    : Primitive(knot),
-  Symbol('apply')  : Primitive(kapply),
+  Symbol('null?')  : Primitive(nullp, 'null?'),
+  Symbol('not')    : Primitive(knot, 'not'),
+  Symbol('apply')  : Primitive(kapply, 'apply'),
   Symbol('and')    : Special(kand),
   Symbol('or')     : Special(kor),
   Symbol('let')    : Special(let),
-  Symbol('pair?')  : Primitive(pairp),
-  Symbol('list?')  : Primitive(listp),
+  Symbol('pair?')  : Primitive(pairp, 'pair?'),
+  Symbol('list?')  : Primitive(listp, 'list?'),
   Symbol('eqv?')   : Primitive(eqvp)
 })
+
+def tramp(t):
+  while isinstance(t, Recurse):
+    t = t()
+  return t
+
+def ziptoenv(pars, args, env):
+  env.define(pars.car, args.car)
+  if isinstance(pars.cdr, Symbol):
+    env.define(pars.cdr, args.cdr)
+  elif isinstance(pars.cdr, Pair):
+    ziptoenv(pars.cdr, args.cdr, env)
+ 
+def kevalpair(env, exp):
+  if exp is Null:
+    return Null
+  else:
+    ecar = keval(env, exp.car)
+    return Pair(ecar, kevalpair(env, exp.cdr))
+
+def kevalt(env, exp):
+  t = keval(env, exp)
+  while isinstance(t, Recurse):
+    t = t()
+  return t
+
+def keval(env, exp):
+  if isinstance(exp, (Number, String, Boolean)):
+    return exp
+  elif isinstance(exp, Symbol):
+    return env.lookup(exp)
+  elif isinstance(exp, Pair):
+    if not exp.proper:
+      error('cannot evaluate improper list application')
+    fn = keval(env, exp.car)
+    if isinstance(fn, Primitive):
+      args = kevalpair(env, exp.cdr)
+      return fn(env, args)
+    elif isinstance(fn, Special):
+      args = exp.cdr
+      return fn(env, args)
+    elif isinstance(fn, Closure):
+      args = kevalpair(env, exp.cdr)
+      nenv = Env(fn.env)
+      if isinstance(fn.params, Symbol):
+        # (lambda args ...)
+        nenv.define(fn.params, args)
+      elif isinstance(fn.params, Pair):
+        # (lambda (...) ...)
+        pl = fn.params.length()
+        al = args.length()
+        if (fn.params.proper and pl != al) or (not fn.params.proper and al < pl):
+          error("function requires %d%s arguments, given %d" %
+              (pl, '' if fn.params.proper else '+', al))
+        ziptoenv(fn.params, args, nenv)
+      elif fn.params is not Null:
+        error("function params must be a symbol or list")
+      return keval(nenv, fn.body)
+    else:
+      error("cannot apply '%s' to '%s'" % (fn, exp.cdr))
+  elif isinstance(exp, NullType):
+    error('cannot evaluate empty procedure application')
 
 def repl(strm, interactive=True):
   p = Parser(Lexer(strm))
@@ -694,7 +776,9 @@ def repl(strm, interactive=True):
       sexp = p.sexp()
       if sexp is None:
         break
-      ret = sexp.eval(toplevel)
+      #ret = sexp.eval(toplevel)
+      ret = keval(toplevel, sexp)
+      #ret = tramp(ret)
       if ret is not Undef and interactive:
         print ret
     except KuaoException as e:
