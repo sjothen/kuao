@@ -114,12 +114,25 @@ class Pair:
       yield car
   def __str__(self):
     def insides(car, cdr):
-      if isinstance(cdr, Pair):
-        return str(car) + ' ' + insides(cdr.car, cdr.cdr)
-      elif cdr is Null:
-        return str(car)
-      else:
-        return str(car) + ' . ' + str(cdr)
+      rep = ''
+      while True:
+        if isinstance(cdr, Pair):
+          rep += str(car) + ' '
+          car = cdr.car
+          cdr = cdr.cdr
+        elif cdr is Null:
+          rep += str(car)
+          break
+        else:
+          rep += str(car) + ' . ' + str(cdr)
+          break
+      return rep
+      #if isinstance(cdr, Pair):
+      #  return str(car) + ' ' + insides(cdr.car, cdr.cdr)
+      #elif cdr is Null:
+      #  return str(car)
+      #else:
+      # return str(car) + ' . ' + str(cdr)
     return '(' + insides(self.car, self.cdr) + ')'
 
 def checkproper(xs):
