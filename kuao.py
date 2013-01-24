@@ -576,6 +576,26 @@ def begin(env, exp):
     #ret = form.eval(env)
   return ret
 
+@special('and')
+def kand(env, exp):
+  ret = T
+  for e in exp.each():
+    ev = e.eval(env)
+    if ev is F:
+      return F
+    ret = ev
+  return ret
+
+@special('or')
+def kor(env, exp):
+  ret = F
+  for e in exp.each():
+    ev = e.eval(env)
+    if ev is not F:
+      return ev
+    ret = ev
+  return ret
+
 @primitive('display')
 def display(env, exp):
   val = exp.car
@@ -686,26 +706,6 @@ def kapply(env, exp):
   lst = exp.cdr.car
   return fn(env, lst)
 
-@primitive('and')
-def kand(env, exp):
-  ret = T
-  for e in exp.each():
-    ev = e.eval(env)
-    if ev is F:
-      return F
-    ret = ev
-  return ret
-
-@primitive('or')
-def kor(env, exp):
-  ret = F
-  for e in exp.each():
-    ev = e.eval(env)
-    if ev is not F:
-      return ev
-    ret = ev
-  return ret
-
 @primitive('pair?')
 def pairp(env, exp):
   check('pair?', exp, 1)
@@ -804,7 +804,6 @@ def repl(strm, interactive=True):
       sexp = p.sexp()
       if sexp is None:
         break
-      #ret = sexp.eval(toplevel)
       ret = tramp(keval(toplevel, sexp))
       if ret is not Undef and interactive:
         print ret
