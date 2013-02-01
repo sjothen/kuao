@@ -127,12 +127,6 @@ class Pair:
           rep += str(car) + ' . ' + str(cdr)
           break
       return rep
-      #if isinstance(cdr, Pair):
-      #  return str(car) + ' ' + insides(cdr.car, cdr.cdr)
-      #elif cdr is Null:
-      #  return str(car)
-      #else:
-      # return str(car) + ' . ' + str(cdr)
     return '(' + insides(self.car, self.cdr) + ')'
 
 def checkproper(xs):
@@ -177,42 +171,6 @@ class Closure:
       return '#(lambda)'
     else:
       return '#(function %s)' % self.name
-  def __call__(self, env, args):
-    def defineinto(p, a, env):
-      env.define(p.car, a.car)
-      if isinstance(p.cdr, Symbol):
-        env.define(p.cdr, a.cdr)
-      elif isinstance(p.cdr, Pair):
-        defineinto(p.cdr, a.cdr, env)
-    checkproper(args)
-    nenv = Env(self.env)
-    # variable arg lambda
-    if isinstance(self.params, Symbol):
-      nenv.define(self.params, args)
-    # list of params
-    elif isinstance(self.params, Pair):
-      pl = self.params.length()
-      al = args.length()
-      # no rest argument
-      if self.params.proper:
-        if pl != al:
-          error("function requires %d arguments, given %d" % (pl, al))
-        else:
-          defineinto(self.params, args, nenv)
-      # rest argument
-      else:
-        if al < pl:
-          error("function requires at least %d arguments, given %d" % (pl, al))
-        else:
-          defineinto(self.params, args, nenv)
-    else:
-      al = args.length()
-      if al != 0:
-        error("function takes no arguments, given %d" % al)
-    ret = Undef
-    for form in self.body.each():
-      ret = form.eval(nenv)
-    return ret
 
 def symbolp(e):
   return isinstance(e, Symbol)
