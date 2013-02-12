@@ -223,6 +223,15 @@ class Lexer:
     elif c == '\'':
       r.nxt()
       return c
+    elif c == '`':
+      r.nxt()
+      return c
+    elif c == ',':
+      r.nxt()
+      if r.peek() == '@':
+        r.nxt()
+        return ',@'
+      return c
     elif c == ';':
       self.skipcomment()
       return self.token()
@@ -341,6 +350,15 @@ class Parser:
     elif t == '\'':
       s = self.sexp()
       return Pair(Symbol('quote'), Pair(s, Null))
+    elif t == '`':
+      s = self.sexp()
+      return Pair(Symbol('quasiquote'), Pair(s, Null))
+    elif t == ',':
+      s = self.sexp()
+      return Pair(Symbol('unquote'), Pair(s, Null))
+    elif t == ',@':
+      s = self.sexp()
+      return Pair(Symbol('unquote-splicing'), Pair(s, Null))
     else:
       self.error("unexpected token '%s'" % t)
   def pair(self):
@@ -349,7 +367,7 @@ class Parser:
     t = self.lexer.get()
     if t == ')':
       return Null
-    elif t == '\'':
+    elif t == '\'' or t == '`' or t == ',' or t == ',@':
       self.lexer.unget(t)
       s = self.sexp()
       return Pair(s, self.pair())
@@ -495,6 +513,52 @@ def quote(env, exp):
   if exp is Null or exp.cdr is not Null:
     error("'quote' requires 1 arg")
   return exp.car
+
+# Hide binding unless inside quasiquote
+def unquote(env, exp):
+  pass
+
+class Spliced:
+  def __init__(self, p):
+    self.pair = p
+
+def addtoend(v, ps):
+  if ps is Null:
+    return v
+  else:
+    return Pair(ps.car, addtoend(v, ps.cdr))
+
+def quasiquoter(env, p):
+  if isinstance(p, Pair):
+    car = p.car
+    cdr = p.cdr
+    if isinstance(car, Symbol):
+      if car.value == 'unquote':
+        e = keval(env, cdr.car)
+        e = tramp(e)
+        return e
+      elif car.value == 'unquote-splicing':
+        e = keval(env, cdr.car)
+        e = tramp(e)
+        return Spliced(e)
+    ncar = quasiquoter(env, p.car)
+    ncdr = quasiquoter(env, p.cdr)
+    if isinstance(ncar, Spliced):
+      return addtoend(ncar.pair, ncdr)
+    else:
+      return Pair(ncar, ncdr)
+  elif isinstance(p, Symbol):
+    return p
+  elif numberp(p) or booleanp(p) or stringp(p):
+    return p
+  elif p is Null:
+    return Null
+
+@special('quasiquote')
+def quasiquote(env, exp):
+  if exp is Null or exp.cdr is not Null:
+    error("'quasiquote' requires 1 arg")
+  return quasiquoter(env, exp.car)
 
 @special('if')
 def runif(env, exp):
