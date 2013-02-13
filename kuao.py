@@ -113,11 +113,25 @@ class Pair:
       cdr = cdr.cdr
       yield car
   def __str__(self):
+    spec = {
+        'unquote': ',',
+        'quasiquote': '`',
+        'quote': '\'',
+        'unquote-splicing': ',@'
+    }
+    def isspecial(sym):
+      if not isinstance(sym, Symbol):
+        return False
+      v = sym.value
+      return v == 'unquote' or v == 'quasiquote' or v == 'quote' or v == 'unquote-splicing'
     def insides(car, cdr):
       rep = ''
       while True:
         if isinstance(cdr, Pair):
-          rep += str(car) + ' '
+          if isspecial(car):
+            rep += spec[car.value]
+          else:
+            rep += str(car) + ' '
           car = cdr.car
           cdr = cdr.cdr
         elif cdr is Null:
@@ -127,7 +141,10 @@ class Pair:
           rep += str(car) + ' . ' + str(cdr)
           break
       return rep
-    return '(' + insides(self.car, self.cdr) + ')'
+    if isspecial(self.car):
+      return insides(self.car, self.cdr)
+    else:
+      return '(' + insides(self.car, self.cdr) + ')'
 
 def checkproper(xs):
   if xs is not Null and not xs.proper:
@@ -524,23 +541,30 @@ def addtoend(v, ps):
   else:
     return Pair(v.car, addtoend(v.cdr, ps))
 
-def quasiquoter(env, p):
+def quasiquoter(env, p, depth=1):
   if isinstance(p, Pair):
     car = p.car
     cdr = p.cdr
     if isinstance(car, Symbol):
       if car.value == 'unquote':
-        e = keval(env, cdr.car)
-        e = tramp(e)
-        return e
+        if depth - 1 == 0:
+          e = keval(env, cdr.car)
+          e = tramp(e)
+          return e
+        else:
+          return Pair(Symbol('unquote'), Pair(quasiquoter(env, cdr.car, depth-1), Null))
       elif car.value == 'unquote-splicing':
-        e = keval(env, cdr.car)
-        e = tramp(e)
-        return Spliced(e)
+        if depth - 1 == 0:
+          e = keval(env, cdr.car)
+          e = tramp(e)
+          return Spliced(e)
+        else:
+          return Pair(Symbol('unquote-splicing'), Pair(quasiquoter(env, cdr.car, depth-1), Null))
       elif car.value == 'quasiquote':
-        return p
-    ncar = quasiquoter(env, p.car)
-    ncdr = quasiquoter(env, p.cdr)
+        return Pair(Symbol('quasiquote'), Pair(quasiquoter(env, cdr.car, depth+1), Null))
+        #return p
+    ncar = quasiquoter(env, p.car, depth)
+    ncdr = quasiquoter(env, p.cdr, depth)
     if isinstance(ncar, Spliced):
       return addtoend(ncar.pair, ncdr)
     else:
