@@ -514,19 +514,15 @@ def quote(env, exp):
     error("'quote' requires 1 arg")
   return exp.car
 
-# Hide binding unless inside quasiquote
-def unquote(env, exp):
-  pass
-
 class Spliced:
   def __init__(self, p):
     self.pair = p
 
 def addtoend(v, ps):
-  if ps is Null:
-    return v
+  if v is Null:
+    return ps
   else:
-    return Pair(ps.car, addtoend(v, ps.cdr))
+    return Pair(v.car, addtoend(v.cdr, ps))
 
 def quasiquoter(env, p):
   if isinstance(p, Pair):
@@ -541,6 +537,8 @@ def quasiquoter(env, p):
         e = keval(env, cdr.car)
         e = tramp(e)
         return Spliced(e)
+      elif car.value == 'quasiquote':
+        return p
     ncar = quasiquoter(env, p.car)
     ncdr = quasiquoter(env, p.cdr)
     if isinstance(ncar, Spliced):
