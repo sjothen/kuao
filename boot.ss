@@ -27,13 +27,6 @@
 (define (cdddar xs) (cdr (cdr (cdr (car xs)))))
 (define (cddddr xs) (cdr (cdr (cdr (cdr xs)))))
 
-(define (length xs)
-  (define (helper len xs)
-    (if (null? xs)
-        len
-        (helper (+ 1 len) (cdr xs))))
-  (helper 0 xs))
-
 (define (list . args)
   args)
 
@@ -64,3 +57,30 @@
 
 (define-macro (unless condition . body)
   `(when (not ,condition) ,@body))
+
+(define-macro (let clauses . body)
+  `((lambda ,(map car clauses) ,@body) ,@(map cadr clauses)))
+
+(define (foldl f z xs)
+  (if (null? xs)
+      z
+      (foldl f (f z (car xs)) (cdr xs))))
+
+(define fold foldl)
+(define reduce foldl)
+
+(define (length lst)
+  (fold (lambda (x y) (+ x 1)) 0 lst))
+
+(define (foldr f z xs)
+  (if (null? xs)
+      z
+      (f (car xs) (foldr f z (cdr xs)))))
+
+(define (filter p? xs)
+  (foldr (lambda (x y)
+           (if (p? x)
+               (cons x y)
+               y))
+         '()
+         xs))
