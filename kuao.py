@@ -487,7 +487,8 @@ def define(env, exp):
     env.define(name, closure)
   elif isinstance(sym, Symbol):
     # Force eval thru tramp, dont want to be lazy
-    e = tramp(keval(env, val))
+    e = keval(env, val)
+    e = tramp(e)
     env.define(sym, e)
   else:
     error("error: arg #1 must be symbol or list")
