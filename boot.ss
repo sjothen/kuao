@@ -57,3 +57,10 @@
 ;; print a newline
 (define (newline)
   (display "\n"))
+
+(define-macro (when condition . body)
+  `(if ,condition
+       (begin ,@body)))
+
+(define-macro (unless condition . body)
+  `(when (not ,condition) ,@body))
