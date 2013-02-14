@@ -853,6 +853,9 @@ def repl(strm, interactive=True):
       ret = tramp(keval(toplevel, sexp))
       if ret is not Undef and interactive:
         print ret
+    except ParserException as e:
+      print e
+      sys.exit()
     except KuaoException as e:
       if interactive:
         print e
