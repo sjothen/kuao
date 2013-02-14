@@ -474,6 +474,33 @@ def primitive(name):
     return fn
   return wrapper
 
+class Macro:
+  def __init__(self, name, params, body, env):
+    self.name = name
+    self.params = params
+    self.body = body
+    self.env = env
+  def __str__(self):
+    return "#(macro %s)" % self.name
+
+# (define-macro (when cond . body)
+#   `(if ,cond
+#      (begin
+#        ,@body)))
+#
+
+@special('define-macro')
+def definemacro(env, exp):
+  sym = exp.car
+  if not isinstance(sym, Pair):
+    error("error: arg #1 of define-macro must be a list")
+  if exp.cdr is Null:
+    error("error: define-macro requires 2 arguments")
+  body = exp.cdr.car
+  mac = Macro(sym.car, sym.cdr, body, env)
+  env.define(sym.car, mac)
+  return Undef
+
 @special('define')
 def define(env, exp):
   sym = exp.car
@@ -642,7 +669,8 @@ def kor(env, exp):
 @primitive('display')
 def display(env, exp):
   val = exp.car
-  sys.stdout.write(val.value if isinstance(val, String) else str(val))
+  pr = val.value if isinstance(val, String) else str(val)
+  sys.stdout.write(pr)
   return Undef
 
 @primitive('+')
@@ -799,6 +827,37 @@ def kevalpair(env, exp):
     ecar = kevalt(env, exp.car)
     return Pair(ecar, kevalpair(env, exp.cdr))
 
+def macroexpand(env, exp):
+  if isinstance(exp.car, Macro):
+    return tramp(keval(env, exp))
+  else:
+    return exp
+
+def mapargstoparams(fun, typ, env, exp):
+  """
+  Add all arguments to the environment, mapped to their param names. Handles
+  the cases where there is a list of formal parameters as well as when there is
+  a single symbol.
+
+  This can be used for mapping unevaled forms in macros, or for closures where
+  args are eval'd.
+  """
+  args = kevalpair(env, exp.cdr) if typ == 'closure' else exp.cdr
+  nenv = Env(fun.env)
+  if isinstance(fun.params, Symbol):
+    # (lambda args ...)
+    nenv.define(fun.params, args)
+  elif isinstance(fun.params, Pair):
+    # (lambda (x y ...) ...)
+    pl = fun.params.length()
+    al = args.length()
+    if (fun.params.proper and pl != al) or (not fun.params.proper and al < pl):
+      error('%s requires %d%s arguments, given %d' % (typ, pl, '' if fun.params.proper else '+', al))
+    ziptoenv(fun.params, args, nenv)
+  elif fun.params is not Null:
+    error('%s params must be a symbol or list' % typ)
+  return nenv
+
 def keval(env, exp):
   if isinstance(exp, (Number, String, Boolean)):
     return exp
@@ -807,7 +866,7 @@ def keval(env, exp):
   elif isinstance(exp, Pair):
     if not exp.proper:
       error('cannot evaluate improper list application')
-    fn = keval(env, exp.car)
+    fn = tramp(keval(env, exp.car))
     if isinstance(fn, Primitive):
       args = kevalpair(env, exp.cdr)
       return fn(env, args)
@@ -815,23 +874,18 @@ def keval(env, exp):
       args = exp.cdr
       return fn(env, args)
     elif isinstance(fn, Closure):
-      args = kevalpair(env, exp.cdr)
-      nenv = Env(fn.env)
-      if isinstance(fn.params, Symbol):
-        # (lambda args ...)
-        nenv.define(fn.params, args)
-      elif isinstance(fn.params, Pair):
-        # (lambda (...) ...)
-        pl = fn.params.length()
-        al = args.length()
-        if (fn.params.proper and pl != al) or (not fn.params.proper and al < pl):
-          error("function requires %d%s arguments, given %d" %
-              (pl, '' if fn.params.proper else '+', al))
-        ziptoenv(fn.params, args, nenv)
-      elif fn.params is not Null:
-        error("function params must be a symbol or list")
+      nenv = mapargstoparams(fn, 'closure', env, exp)
       return Recurse(keval, nenv, fn.body)
-      #return keval(nenv, fn.body)
+    elif isinstance(fn, Macro):
+      nenv = mapargstoparams(fn, 'macro', env, exp)
+      body = fn.body
+      if body.car == Symbol('quasiquote'):
+        # Expand initial quasiquote form
+        body = keval(nenv, fn.body)
+      # And then expand the macro
+      expanded = macroexpand(env, body)
+      # Eval
+      return Recurse(keval, env, expanded)
     else:
       error("cannot apply '%s' to '%s'" % (fn, exp.cdr))
   elif isinstance(exp, NullType):
