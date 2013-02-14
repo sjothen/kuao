@@ -592,20 +592,16 @@ def runif(env, exp):
   cond = exp.car
   true = exp.cdr.car
   false = exp.cdr.cdr
-  #e = cond.eval(env)
   e = tramp(keval(env, cond))
   if isinstance(e, Boolean) and e.value:
-    #return true.eval(env)
-    return keval(env, true)
+    return tramp(keval(env, true))
   elif isinstance(e, Boolean) and not e.value:
     if false is Null:
       return Undef
     else:
-      return keval(env, false.car)
-      #return false.car.eval(env)
+      return tramp(keval(env, false.car))
   else:
-    return keval(env, true)
-    #return true.eval(env)
+    return tramp(keval(env, true))
 
 @special('lambda')
 def mklambda(env, exp):
@@ -620,7 +616,7 @@ def begin(env, exp):
   ret = Undef
   for form in exp.each():
     ret = keval(env, form)
-    #ret = form.eval(env)
+    ret = tramp(ret)
   return ret
 
 @special('and')
