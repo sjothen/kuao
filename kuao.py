@@ -363,7 +363,7 @@ class Parser:
     if self.atomp(t):
       return t
     elif t == '(':
-      return self.pair()
+      return self.pair(True)
     elif t == '\'':
       s = self.sexp()
       return Pair(Symbol('quote'), Pair(s, Null))
@@ -378,7 +378,7 @@ class Parser:
       return Pair(Symbol('unquote-splicing'), Pair(s, Null))
     else:
       self.error("unexpected token '%s'" % t)
-  def pair(self):
+  def pair(self, first=False):
     # pair : '(' sexp* ')'
     #      | '(' sexp+ . sexp ')'
     t = self.lexer.get()
@@ -391,13 +391,15 @@ class Parser:
     elif self.atomp(t):
       return Pair(t, self.pair())
     elif t == '.':
+      if first:
+        self.error("expected sexp before '.'")
       s = self.sexp()
       t = self.lexer.get()
       if t != ')':
         self.error("expected token ')', got '%s'" % t)
       return s
     else:
-      fst = self.pair()
+      fst = self.pair(True)
       snd = self.pair()
       return Pair(fst, snd)
 
